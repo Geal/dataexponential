@@ -49,7 +49,7 @@ impl Rule {
       }
     })).collect::<HashSet<_>>();
 
-    let variables = MatchedVariables::new(variables_set.drain().collect());
+    let variables = MatchedVariables::new(variables_set);
 
     new_facts.extend(CombineIt::new(variables, &self.1, facts).map(|h| {
       let mut p = self.0.clone();
@@ -151,7 +151,7 @@ impl<'a> Iterator for CombineIt<'a> {
 pub struct MatchedVariables(pub HashMap<String, Option<String>>);
 
 impl MatchedVariables {
-  pub fn new(import: Vec<String>) -> Self {
+  pub fn new(import: HashSet<String>) -> Self {
     MatchedVariables(import.iter().map(|key| (key.clone(), None)).collect())
   }
 
