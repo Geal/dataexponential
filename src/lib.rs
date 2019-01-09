@@ -51,11 +51,7 @@ impl Rule {
 
     let variables = MatchedVariables::new(variables_set.drain().collect());
 
-    let mut result = Vec::new();
-    combine(&variables, &self.1, facts, &mut result);
-
-    //println!("rule {:?} got results:\n{:#?}", self, result);
-    new_facts.extend(result.iter().map(|h| {
+    new_facts.extend(CombineIt::new(variables, &self.1, facts).map(|h| {
       let mut p = self.0.clone();
       for index in 0..p.ids.len() {
         let value = match &p.ids[index] {
@@ -71,33 +67,83 @@ impl Rule {
   }
 }
 
-pub fn combine(variables: &MatchedVariables, predicates: &[Predicate], facts: &HashSet<Fact>, result: &mut Vec<HashMap<String, String>>) {
-  if predicates.is_empty() {
-    if let Some(complete) = variables.complete() {
-      result.push(complete);
+pub struct CombineIt<'a> {
+  variables: MatchedVariables,
+  predicates: &'a [Predicate],
+  all_facts: &'a HashSet<Fact>,
+  current_facts: Box<Iterator<Item=&'a Fact> + 'a>,
+  current_it: Option<Box<CombineIt<'a>>>,
+}
+
+impl<'a> CombineIt<'a> {
+  pub fn new(variables: MatchedVariables, predicates: &'a [Predicate], facts: &'a HashSet<Fact>) -> Self {
+    let mut p = predicates[0].clone();
+    CombineIt {
+      variables,
+      predicates,
+      all_facts: facts,
+      current_facts: Box::new(facts.iter().filter(move |fact| match_preds(&fact.0, &p))),
+      current_it: None,
     }
-    return;
   }
+}
 
-  let pred = &predicates[0];
+impl<'a> Iterator for CombineIt<'a> {
+  type Item = HashMap<String, String>;
 
-  for fact in facts.iter().filter(|fact| match_preds(&fact.0, pred)) {
-    let mut vars = variables.clone();
-    let mut match_ids = true;
-    for (key, id) in pred.ids.iter().zip(&fact.0.ids) {
-      if let (ID::Variable(k), ID::Literal(i)) = (key, id) {
-        if !vars.insert(k, i) {
-          match_ids = false;
-          break;
+  fn next(&mut self) -> Option<HashMap<String,String>> {
+    if self.predicates.is_empty() {
+      return self.variables.complete();
+    }
+
+    loop {
+
+      if self.current_it.is_none() {
+        let pred = &self.predicates[0];
+
+        loop {
+          if let Some(current_fact) = self.current_facts.next() {
+            let mut vars = self.variables.clone();
+            let mut match_ids = true;
+            for (key, id) in pred.ids.iter().zip(&current_fact.0.ids) {
+              if let (ID::Variable(k), ID::Literal(i)) = (key, id) {
+                if !vars.insert(&k, &i) {
+                  match_ids = false;
+                  break;
+                }
+              }
+            }
+
+            if !match_ids {
+              continue;
+            }
+
+            if self.predicates.len() == 1 {
+              if let Some(val) = vars.complete() {
+                return Some(val);
+              } else {
+                continue;
+              }
+            } else {
+              self.current_it = Some(Box::new(CombineIt::new(vars, &self.predicates[1..], &self.all_facts)));
+            }
+            break;
+          } else {
+            return None;
+          }
         }
       }
-    }
 
-    if !match_ids {
-      continue;
-    }
+      if self.current_it.is_none() {
+        break None;
+      }
 
-    combine(&vars, &predicates[1..], facts, result);
+      if let Some(val) = self.current_it.as_mut().and_then(|it| it.next()) {
+        break Some(val);
+      } else {
+        self.current_it = None;
+      }
+    }
   }
 }
 
@@ -243,6 +289,7 @@ mod tests {
     w.facts.insert(fact("parent", &["A", "B"]));
     w.facts.insert(fact("parent", &["B", "C"]));
     w.facts.insert(fact("parent", &["C", "D"]));
+    w.facts.insert(fact("parent", &["C", "E"]));
     w.rules.push(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
       pred("parent", &[var("grandparent"), var("parent")]),
       pred("parent", &[var("parent"), var("grandchild")])
@@ -257,6 +304,14 @@ mod tests {
     }
     println!("parents of B: {:?}", w.query(pred("parent", &[var("parent"), lit("B")])));
     println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
+
+    w.rules.push(rule("siblings", &[var("A"), var("B")], &[
+      pred("parent", &[var("parent"), var("A")]),
+      pred("parent", &[var("parent"), var("B")])
+    ]));
+
+    w.run();
+    println!("siblings: {:#?}", w.query(pred("siblings", &[var("A"), var("B")])).unwrap());
     panic!();
   }
 }
