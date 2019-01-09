@@ -1,3 +1,7 @@
+#![cfg_attr(feature = "unstable", feature(test))]
+#[cfg(all(feature = "unstable", test))]
+extern crate test;
+
 use std::fmt;
 use std::collections::{HashMap,HashSet};
 
@@ -322,5 +326,27 @@ mod tests {
     println!("siblings: {:#?}", w.query(pred("siblings", &[var("A"), var("B")])));
     */
     panic!();
+  }
+}
+
+#[cfg(test)]
+mod bench {
+  use super::*;
+  use test::Bencher;
+
+  #[bench]
+  fn grandparents(b: &mut Bencher) {
+    let mut w = World::new();
+    w.facts.insert(fact("parent", &["A", "B"]));
+    w.facts.insert(fact("parent", &["B", "C"]));
+    w.facts.insert(fact("parent", &["C", "D"]));
+
+    b.iter(|| {
+      w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
+        pred("parent", &[var("grandparent"), var("parent")]),
+        pred("parent", &[var("parent"), var("grandchild")])
+      ]))
+    });
+    
   }
 }
