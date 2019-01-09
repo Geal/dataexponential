@@ -53,6 +53,7 @@ impl Rule {
     let variables = MatchedVariables::new(variables_set);
 
     new_facts.extend(CombineIt::new(variables, &self.1, facts).map(|h| {
+    //new_facts.extend(Combiner::new(variables, &self.1, facts).map(|h| {
       let mut p = self.0.clone();
       for index in 0..p.ids.len() {
         let value = match &p.ids[index] {
@@ -143,6 +144,107 @@ impl<'a> Iterator for CombineIt<'a> {
         break Some(val);
       } else {
         self.current_it = None;
+      }
+    }
+  }
+}
+
+pub struct Combiner<'a> {
+  variables: MatchedVariables,
+  predicates: &'a [Predicate],
+  pred_facts: Vec<Vec<&'a Fact>>,
+  indexes: Vec<usize>,
+}
+
+impl<'a> Combiner<'a> {
+  pub fn new(variables: MatchedVariables, predicates: &'a [Predicate], facts: &'a HashSet<Fact>) -> Self {
+    let pred_facts:Vec<Vec<&Fact>> = predicates.iter().map(|p| {
+        facts.iter().filter(move |fact| match_preds(&fact.0, &p)).collect()
+      }).collect();
+    let indexes = std::iter::repeat(0).take(pred_facts.len()).collect();
+
+    Combiner {
+      variables,
+      predicates,
+      pred_facts,
+      indexes,
+    }
+  }
+}
+
+pub fn advance(pred_facts: &[Vec<&Fact>], indexes: &mut[usize]) -> bool {
+  let mut cursor = 0;
+  //let mut count = 0;
+  loop {
+    //count += 1;
+    //assert!(count < 1000);
+    //println!("advance loop(cursor = {}): {:?}", cursor, indexes);
+
+    if cursor == pred_facts.len() {
+      return false;
+    }
+
+    indexes[cursor] += 1;
+    if indexes[cursor] < pred_facts[cursor].len() {
+      for i in 0..cursor {
+        indexes[i] = 0;
+      }
+      return true;
+    } else {
+      cursor += 1;
+    }
+  }
+}
+
+pub fn can_advance(pred_facts: &[Vec<&Fact>], indexes: &[usize]) -> bool {
+  indexes.iter().zip(pred_facts).all(|(index, facts)| *index < facts.len())
+}
+
+impl<'a> Iterator for Combiner<'a> {
+  type Item = HashMap<String, ID>;
+
+  fn next(&mut self) -> Option<HashMap<String,ID>> {
+    //println!("Combiner::next(): {:?}, max = {:?}", self.indexes,
+    //  self.pred_facts.iter().map(|f| f.len()).collect::<Vec<_>>());
+
+    if self.pred_facts.iter().any(|facts| facts.is_empty()) {
+      return None;
+    }
+
+    //let mut count = 0;
+    loop {
+      //count += 1;
+      //assert!(count < 100);
+      //println!("combiner loop indexes: {:?}", self.indexes);
+
+      if !can_advance(&self.pred_facts, &self.indexes) {
+        //println!("cannot advance anymore");
+        return None;
+      }
+
+      let facts_combination = self.pred_facts.iter().zip(&self.indexes).map(|(facts, index)| facts[*index]);
+      let mut vars = self.variables.clone();
+      let mut match_ids = true;
+      for (key, id) in self.predicates.iter().zip(facts_combination).flat_map(|(pred, fact)| {
+        pred.ids.iter().zip(&fact.0.ids)
+      }) {
+        if let (ID::Variable(k), id) = (key, id) {
+          if !vars.insert(&k, &id) {
+            match_ids = false;
+            break;
+          }
+        }
+      }
+
+      advance(&self.pred_facts, &mut self.indexes);
+
+      if !match_ids {
+        continue;
+      } else {
+        if let Some(v) = vars.complete() {
+          //println!("combiner returning: {:?}", v);
+          return Some(v);
+        }
       }
     }
   }
@@ -345,6 +447,26 @@ mod bench {
     w.facts.insert(fact("parent", &["A", "B"]));
     w.facts.insert(fact("parent", &["B", "C"]));
     w.facts.insert(fact("parent", &["C", "D"]));
+    w.facts.insert(fact("parent", &["C", "E"]));
+    w.facts.insert(fact("parent", &["X", "C"]));
+    w.facts.insert(fact("parent", &["Y", "B"]));
+    w.facts.insert(fact("parent", &["A", "0"]));
+    w.facts.insert(fact("parent", &["A", "1"]));
+    w.facts.insert(fact("parent", &["A", "2"]));
+    w.facts.insert(fact("parent", &["A", "3"]));
+    w.facts.insert(fact("parent", &["A", "4"]));
+
+    w.facts.insert(fact("parent", &["AA", "AB"]));
+    w.facts.insert(fact("parent", &["AB", "AC"]));
+    w.facts.insert(fact("parent", &["AC", "AD"]));
+    w.facts.insert(fact("parent", &["AC", "AE"]));
+    w.facts.insert(fact("parent", &["AX", "AC"]));
+    w.facts.insert(fact("parent", &["AY", "AB"]));
+    w.facts.insert(fact("parent", &["AA", "0"]));
+    w.facts.insert(fact("parent", &["AA", "1"]));
+    w.facts.insert(fact("parent", &["AA", "2"]));
+    w.facts.insert(fact("parent", &["AA", "3"]));
+    w.facts.insert(fact("parent", &["AA", "4"]));
 
     b.iter(|| {
       w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
@@ -352,6 +474,6 @@ mod bench {
         pred("parent", &[var("parent"), var("grandchild")])
       ]))
     });
-    
   }
+
 }
