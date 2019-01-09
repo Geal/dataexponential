@@ -52,11 +52,11 @@ impl Rule {
       let mut p = self.0.clone();
       for index in 0..p.ids.len() {
         let value = match &p.ids[index] {
-          ID::Literal(_) => continue,
           ID::Variable(i) => h.get(i).unwrap(),
+          _ => continue,
         };
 
-        p.ids[index] = lit(value);
+        p.ids[index] = value.clone();
       }
 
       Fact(p)
@@ -86,9 +86,9 @@ impl<'a> CombineIt<'a> {
 }
 
 impl<'a> Iterator for CombineIt<'a> {
-  type Item = HashMap<String, String>;
+  type Item = HashMap<String, ID>;
 
-  fn next(&mut self) -> Option<HashMap<String,String>> {
+  fn next(&mut self) -> Option<HashMap<String,ID>> {
     if self.predicates.is_empty() {
       return self.variables.complete();
     }
@@ -103,8 +103,8 @@ impl<'a> Iterator for CombineIt<'a> {
             let mut vars = self.variables.clone();
             let mut match_ids = true;
             for (key, id) in pred.ids.iter().zip(&current_fact.0.ids) {
-              if let (ID::Variable(k), ID::Literal(i)) = (key, id) {
-                if !vars.insert(&k, &i) {
+              if let (ID::Variable(k), id) = (key, id) {
+                if !vars.insert(&k, &id) {
                   match_ids = false;
                   break;
                 }
@@ -145,20 +145,20 @@ impl<'a> Iterator for CombineIt<'a> {
 }
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct MatchedVariables(pub HashMap<String, Option<String>>);
+pub struct MatchedVariables(pub HashMap<String, Option<ID>>);
 
 impl MatchedVariables {
   pub fn new(import: HashSet<String>) -> Self {
     MatchedVariables(import.iter().map(|key| (key.clone(), None)).collect())
   }
 
-  pub fn insert(&mut self, key: &str, value: &str) -> bool {
+  pub fn insert(&mut self, key: &str, value: &ID) -> bool {
     match self.0.get(key) {
       Some(None) => {
-        self.0.insert(key.to_string(), Some(value.to_string()));
+        self.0.insert(key.to_string(), Some(value.clone()));
         true
       },
-      Some(Some(v)) => value == v.as_str(),
+      Some(Some(v)) => value == v,
       None => false
     }
   }
@@ -167,7 +167,7 @@ impl MatchedVariables {
     self.0.values().all(|v| v.is_some())
   }
 
-  pub fn complete(&self) -> Option<HashMap<String, String>> {
+  pub fn complete(&self) -> Option<HashMap<String, ID>> {
     if self.is_complete() {
       Some(self.0.iter().map(|(k, v)| (k.clone(), v.clone().unwrap())).collect())
     } else {
@@ -209,8 +209,8 @@ pub fn match_preds(pred1: &Predicate, pred2: &Predicate) -> bool {
     pred1.ids.len() == pred2.ids.len() &&
     pred1.ids.iter().zip(&pred2.ids).all(|(fid, pid)| {
       match (fid, pid) {
-        (ID::Literal(_), ID::Variable(_)) => true,
-        (ID::Variable(_), ID::Literal(_)) => true,
+        (_, ID::Variable(_)) => true,
+        (ID::Variable(_), _) => true,
         (ID::Literal(i), ID::Literal(ref j)) => i == j,
         _ => false
       }
