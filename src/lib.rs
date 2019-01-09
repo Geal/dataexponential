@@ -238,9 +238,8 @@ impl World {
       let mut new_facts:Vec<Fact> = Vec::new();
       for rule in self.rules.iter() {
         rule.apply(&self.facts, &mut new_facts);
-        println!("new_facts after applying {:?}:\n{:#?}", rule, new_facts);
+        //println!("new_facts after applying {:?}:\n{:#?}", rule, new_facts);
       }
-
 
       let len = self.facts.len();
       self.facts.extend(new_facts.drain(..));
@@ -256,7 +255,7 @@ impl World {
 
   }
 
-  pub fn query(&self, pred: Predicate) -> Option<Vec<&Fact>> {
+  pub fn query(&self, pred: Predicate) -> Vec<&Fact> {
     let facts = self.facts.iter().filter(|f| {
       &f.0.name == &pred.name &&
           f.0.ids.iter().zip(&pred.ids).all(|(fid, pid)| {
@@ -268,11 +267,13 @@ impl World {
           })
       }).collect::<Vec<_>>();
 
-    if facts.is_empty() {
-      None
-    } else {
-      Some(facts)
-    }
+    facts
+  }
+
+  pub fn query_rule(&self, rule: Rule) -> Vec<Fact> {
+    let mut new_facts:Vec<Fact> = Vec::new();
+    rule.apply(&self.facts, &mut new_facts);
+    new_facts
   }
 }
 
@@ -286,7 +287,14 @@ mod tests {
     w.facts.insert(fact("parent", &["A", "B"]));
     w.facts.insert(fact("parent", &["B", "C"]));
     w.facts.insert(fact("parent", &["C", "D"]));
-    w.facts.insert(fact("parent", &["C", "E"]));
+
+    let query_rule_result = w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
+      pred("parent", &[var("grandparent"), var("parent")]),
+      pred("parent", &[var("parent"), var("grandchild")])
+    ]));
+    println!("grandparents query_rules: {:?}", query_rule_result);
+    println!("current facts: {:?}", w.facts);
+
     w.rules.push(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
       pred("parent", &[var("grandparent"), var("parent")]),
       pred("parent", &[var("parent"), var("grandchild")])
@@ -295,20 +303,24 @@ mod tests {
     w.run();
 
     println!("parents:");
-    let res = w.query(pred("parent", &[var("parent"), var("grandchild")]));
-    for fact in res.unwrap() {
+    let res = w.query(pred("parent", &[var("parent"), var("child")]));
+    for fact in res {
       println!("\t{}", fact);
     }
     println!("parents of B: {:?}", w.query(pred("parent", &[var("parent"), lit("B")])));
     println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
+    w.facts.insert(fact("parent", &["C", "E"]));
+    w.run();
+    println!("grandparents after inserting parent(C, E): {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
 
-    w.rules.push(rule("siblings", &[var("A"), var("B")], &[
+    /*w.rules.push(rule("siblings", &[var("A"), var("B")], &[
       pred("parent", &[var("parent"), var("A")]),
       pred("parent", &[var("parent"), var("B")])
     ]));
 
     w.run();
-    println!("siblings: {:#?}", w.query(pred("siblings", &[var("A"), var("B")])).unwrap());
+    println!("siblings: {:#?}", w.query(pred("siblings", &[var("A"), var("B")])));
+    */
     panic!();
   }
 }
