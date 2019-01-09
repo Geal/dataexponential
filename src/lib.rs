@@ -1,8 +1,5 @@
-extern crate itertools;
-
 use std::fmt;
 use std::collections::{HashMap,HashSet};
-use itertools::Itertools;
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub enum ID {
@@ -37,7 +34,7 @@ impl fmt::Display for Fact {
 
 impl Rule {
   pub fn apply(&self, facts: &HashSet<Fact>, new_facts: &mut Vec<Fact>) {
-    let mut variables_set = self.1.iter().flat_map(|pred| pred.ids.iter().filter(|id| {
+    let variables_set = self.1.iter().flat_map(|pred| pred.ids.iter().filter(|id| {
       match id {
         ID::Variable(_) => true,
         _ => false
@@ -77,7 +74,7 @@ pub struct CombineIt<'a> {
 
 impl<'a> CombineIt<'a> {
   pub fn new(variables: MatchedVariables, predicates: &'a [Predicate], facts: &'a HashSet<Fact>) -> Self {
-    let mut p = predicates[0].clone();
+    let p = predicates[0].clone();
     CombineIt {
       variables,
       predicates,
@@ -167,11 +164,11 @@ impl MatchedVariables {
   }
 
   pub fn is_complete(&self) -> bool {
-    self.0.iter().all(|(k, v)| v.is_some())
+    self.0.values().all(|v| v.is_some())
   }
 
   pub fn complete(&self) -> Option<HashMap<String, String>> {
-    if self.0.iter().all(|(k, v)| v.is_some()) {
+    if self.is_complete() {
       Some(self.0.iter().map(|(k, v)| (k.clone(), v.clone().unwrap())).collect())
     } else {
       None
