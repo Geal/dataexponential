@@ -315,7 +315,13 @@ mod tests {
     println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
     w.facts.insert(fact("parent", &["C", "E"]));
     w.run();
-    println!("grandparents after inserting parent(C, E): {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
+    let mut res = w.query(pred("grandparent", &[var("grandparent"), var("grandchild")]));
+    println!("grandparents after inserting parent(C, E): {:?}", res);
+
+    let res = res.drain(..).cloned().collect::<HashSet<_>>();
+    let compared = (vec![fact("grandparent", &["A", "C"]), fact("grandparent", &["B", "D"]),
+      fact("grandparent",&["B", "E"])]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res, compared);
 
     /*w.rules.push(rule("siblings", &[var("A"), var("B")], &[
       pred("parent", &[var("parent"), var("A")]),
@@ -325,7 +331,6 @@ mod tests {
     w.run();
     println!("siblings: {:#?}", w.query(pred("siblings", &[var("A"), var("B")])));
     */
-    panic!();
   }
 }
 
