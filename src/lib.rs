@@ -476,4 +476,25 @@ mod bench {
     });
   }
 
+  #[bench]
+  fn ancestor(b: &mut Bencher) {
+    let mut w = World::new();
+    w.facts.insert(fact("parent", &["A", "B"]));
+    w.facts.insert(fact("parent", &["B", "C"]));
+    w.facts.insert(fact("parent", &["C", "D"]));
+    w.facts.insert(fact("parent", &["C", "E"]));
+    w.facts.insert(fact("parent", &["X", "C"]));
+    w.facts.insert(fact("parent", &["Y", "B"]));
+    w.rules.push(rule("ancestor", &[var("older"), var("younger")], &[
+      pred("parent", &[var("older"), var("younger")])
+    ]));
+    w.rules.push(rule("ancestor", &[var("older"), var("younger")], &[
+      pred("parent", &[var("older"), var("middle")]),
+      pred("ancestor", &[var("middle"), var("younger")])
+    ]));
+
+    b.iter(|| {
+      w.run();
+    });
+  }
 }
