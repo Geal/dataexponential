@@ -31,7 +31,37 @@ pub enum Element {
 pub struct Fact(pub Predicate);
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct Rule(pub Predicate, pub Vec<Predicate>);
+pub struct Rule(pub Predicate, pub Vec<Predicate>, pub Vec<Constraint>);
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct Constraint {
+  pub id: u32,
+  pub kind: ConstraintKind,
+}
+#[derive(Debug,Clone,PartialEq)]
+pub enum ConstraintKind {
+  Lower(i64),
+  Larger(i64),
+  Equal(i64),
+}
+
+impl Constraint {
+  pub fn check(&self, name: u32, id: &ID) -> bool {
+    if name != self.id {
+      return true;
+    }
+
+    match id {
+      ID::Variable(_) => panic!("should not check constraint on a variable"),
+      ID::Literal(_) => true,
+      ID::Integer(i) => match self.kind {
+        ConstraintKind::Lower(j)  => *i < j,
+        ConstraintKind::Larger(j) => *i > j,
+        ConstraintKind::Equal(j)  => *i == j,
+      }
+    }
+  }
+}
 
 impl fmt::Display for Fact {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -55,7 +85,7 @@ impl Rule {
 
     let variables = MatchedVariables::new(variables_set);
 
-    new_facts.extend(CombineIt::new(variables, &self.1, facts).map(|h| {
+    new_facts.extend(CombineIt::new(variables, &self.1, &self.2, facts).map(|h| {
       let mut p = self.0.clone();
       for index in 0..p.ids.len() {
         let value = match &p.ids[index] {
@@ -75,17 +105,19 @@ impl Rule {
 pub struct CombineIt<'a> {
   variables: MatchedVariables,
   predicates: &'a [Predicate],
+  constraints: &'a [Constraint],
   all_facts: &'a HashSet<Fact>,
   current_facts: Box<Iterator<Item=&'a Fact> + 'a>,
   current_it: Option<Box<CombineIt<'a>>>,
 }
 
 impl<'a> CombineIt<'a> {
-  pub fn new(variables: MatchedVariables, predicates: &'a [Predicate], facts: &'a HashSet<Fact>) -> Self {
+  pub fn new(variables: MatchedVariables, predicates: &'a [Predicate], constraints: &'a [Constraint], facts: &'a HashSet<Fact>) -> Self {
     let p = predicates[0].clone();
     CombineIt {
       variables,
       predicates,
+      constraints,
       all_facts: facts,
       current_facts: Box::new(facts.iter().filter(move |fact| match_preds(&fact.0, &p))),
       current_it: None,
@@ -116,8 +148,18 @@ impl<'a> Iterator for CombineIt<'a> {
             let mut match_ids = true;
             for (key, id) in pred.ids.iter().zip(&current_fact.0.ids) {
               if let (ID::Variable(k), id) = (key, id) {
+                for c in self.constraints {
+                  if !c.check(*k, id) {
+                    println!("constraint failed for {} -> {:?}: {:?}", k, id, c);
+                    match_ids = false;
+                    break;
+                  }
+                }
                 if !vars.insert(*k, &id) {
                   match_ids = false;
+                }
+
+                if !match_ids {
                   break;
                 }
               }
@@ -136,7 +178,8 @@ impl<'a> Iterator for CombineIt<'a> {
             } else {
               // create a new iterator with the matched variables, the rest of the predicates,
               // and all of the facts
-              self.current_it = Some(Box::new(CombineIt::new(vars, &self.predicates[1..], &self.all_facts)));
+              self.current_it = Some(Box::new(CombineIt::new(vars, &self.predicates[1..], self.constraints,
+                &self.all_facts)));
             }
             break;
           } else {
@@ -213,7 +256,17 @@ pub fn pred(name: &str, ids: &[ID]) -> Predicate {
 pub fn rule(head_name: &str, head_ids: &[ID], predicates: &[Predicate]) -> Rule {
   Rule(
     pred(head_name, head_ids),
-    Vec::from(predicates)
+    Vec::from(predicates),
+    Vec::new()
+  )
+}
+
+pub fn constrained_rule(head_name: &str, head_ids: &[ID], predicates: &[Predicate],
+  constraints: &[Constraint]) -> Rule {
+  Rule(
+    pred(head_name, head_ids),
+    Vec::from(predicates),
+    Vec::from(constraints)
   )
 }
 
@@ -380,6 +433,26 @@ mod tests {
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![fact("join", &["abc", "AAA"]), fact("join", &["abc", "BBB"]),
       fact("join",&["def", "CCC"])]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+
+    // test constraints
+    let res = w.query_rule(constrained_rule("join",
+      &[var("left"), var("right")],
+      &[
+        pred("t1", &[ID::Variable(1234), var("left")]),
+        pred("t2", &[var("t2_id"), var("right"), ID::Variable(1234)])
+      ],
+      &[Constraint {
+        id: 1234,
+        kind: ConstraintKind::Lower(1)
+      }]
+    ));
+    for fact in &res {
+      println!("\t{}", fact);
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![fact("join", &["abc", "AAA"]), fact("join", &["abc", "BBB"])]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
 }
