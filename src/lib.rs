@@ -1,14 +1,16 @@
 #![cfg_attr(feature = "unstable", feature(test))]
 #[cfg(all(feature = "unstable", test))]
 extern crate test;
+extern crate sha2;
 
 use std::fmt;
 use std::collections::{HashMap,HashSet};
+use sha2::{Sha256, Digest};
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub enum ID {
   Literal(String),
-  Variable(String),
+  Variable(u32),
   Integer(i64),
 }
 
@@ -46,7 +48,7 @@ impl Rule {
       }
     }).map(|id| {
       match id {
-        ID::Variable(i) => i.to_string(),
+        ID::Variable(i) => *i,
         _ => unreachable!(),
       }
     })).collect::<HashSet<_>>();
@@ -93,9 +95,9 @@ impl<'a> CombineIt<'a> {
 }
 
 impl<'a> Iterator for CombineIt<'a> {
-  type Item = HashMap<String, ID>;
+  type Item = HashMap<u32, ID>;
 
-  fn next(&mut self) -> Option<HashMap<String,ID>> {
+  fn next(&mut self) -> Option<HashMap<u32, ID>> {
     // if we're the last iterator in the recursive chain, stop here
     if self.predicates.is_empty() {
       return self.variables.complete();
@@ -115,7 +117,7 @@ impl<'a> Iterator for CombineIt<'a> {
             let mut match_ids = true;
             for (key, id) in pred.ids.iter().zip(&current_fact.0.ids) {
               if let (ID::Variable(k), id) = (key, id) {
-                if !vars.insert(&k, &id) {
+                if !vars.insert(*k, &id) {
                   match_ids = false;
                   break;
                 }
@@ -209,9 +211,9 @@ pub fn can_advance(pred_facts: &[Vec<&Fact>], indexes: &[usize]) -> bool {
 }
 
 impl<'a> Iterator for Combiner<'a> {
-  type Item = HashMap<String, ID>;
+  type Item = HashMap<u32, ID>;
 
-  fn next(&mut self) -> Option<HashMap<String,ID>> {
+  fn next(&mut self) -> Option<HashMap<u32, ID>> {
     //println!("Combiner::next(): {:?}, max = {:?}", self.indexes,
     //  self.pred_facts.iter().map(|f| f.len()).collect::<Vec<_>>());
 
@@ -237,7 +239,7 @@ impl<'a> Iterator for Combiner<'a> {
         pred.ids.iter().zip(&fact.0.ids)
       }) {
         if let (ID::Variable(k), id) = (key, id) {
-          if !vars.insert(&k, &id) {
+          if !vars.insert(*k, &id) {
             match_ids = false;
             break;
           }
@@ -259,17 +261,17 @@ impl<'a> Iterator for Combiner<'a> {
 }
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct MatchedVariables(pub HashMap<String, Option<ID>>);
+pub struct MatchedVariables(pub HashMap<u32, Option<ID>>);
 
 impl MatchedVariables {
-  pub fn new(import: HashSet<String>) -> Self {
+  pub fn new(import: HashSet<u32>) -> Self {
     MatchedVariables(import.iter().map(|key| (key.clone(), None)).collect())
   }
 
-  pub fn insert(&mut self, key: &str, value: &ID) -> bool {
-    match self.0.get(key) {
+  pub fn insert(&mut self, key: u32, value: &ID) -> bool {
+    match self.0.get(&key) {
       Some(None) => {
-        self.0.insert(key.to_string(), Some(value.clone()));
+        self.0.insert(key, Some(value.clone()));
         true
       },
       Some(Some(v)) => value == v,
@@ -281,7 +283,7 @@ impl MatchedVariables {
     self.0.values().all(|v| v.is_some())
   }
 
-  pub fn complete(&self) -> Option<HashMap<String, ID>> {
+  pub fn complete(&self) -> Option<HashMap<u32, ID>> {
     if self.is_complete() {
       Some(self.0.iter().map(|(k, v)| (k.clone(), v.clone().unwrap())).collect())
     } else {
@@ -321,8 +323,13 @@ pub fn lit(name: &str) -> ID {
   ID::Literal(name.to_string())
 }
 
+/// warning: collision risk
 pub fn var(name: &str) -> ID {
-  ID::Variable(name.to_string())
+  let mut hasher = Sha256::new();
+  hasher.input(name);
+  let res = hasher.result();
+  let id: u32 = res[0] as u32 + ((res[1] as u32) << 8) + ((res[2] as u32) << 16) + ((res[3] as u32) << 24);
+  ID::Variable(id)
 }
 
 pub fn match_preds(pred1: &Predicate, pred2: &Predicate) -> bool {

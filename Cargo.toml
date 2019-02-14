@@ -9,4 +9,5 @@ default = ["unstable"]
 unstable = []
 
 [dependencies]
+sha2 = "0.8"
 
