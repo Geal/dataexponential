@@ -12,6 +12,7 @@ pub enum ID {
   Literal(String),
   Variable(u32),
   Integer(i64),
+  Str(String),
 }
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
@@ -38,11 +39,25 @@ pub struct Constraint {
   pub id: u32,
   pub kind: ConstraintKind,
 }
+
 #[derive(Debug,Clone,PartialEq)]
 pub enum ConstraintKind {
+  Int(IntConstraint),
+  Str(StrConstraint),
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum IntConstraint {
   Lower(i64),
   Larger(i64),
   Equal(i64),
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum StrConstraint {
+  Prefix(String),
+  Suffix(String),
+  Equal(String),
 }
 
 impl Constraint {
@@ -51,14 +66,20 @@ impl Constraint {
       return true;
     }
 
-    match id {
-      ID::Variable(_) => panic!("should not check constraint on a variable"),
-      ID::Literal(_) => true,
-      ID::Integer(i) => match self.kind {
-        ConstraintKind::Lower(j)  => *i < j,
-        ConstraintKind::Larger(j) => *i > j,
-        ConstraintKind::Equal(j)  => *i == j,
-      }
+    match (id, &self.kind) {
+      (ID::Variable(_), _) => panic!("should not check constraint on a variable"),
+      (ID::Literal(_), _) => true,
+      (ID::Integer(i), ConstraintKind::Int(c)) => match c {
+        IntConstraint::Lower(j)  => *i < *j,
+        IntConstraint::Larger(j) => *i > *j,
+        IntConstraint::Equal(j)  => *i == *j,
+      },
+      (ID::Str(s), ConstraintKind::Str(c)) => match c {
+        StrConstraint::Prefix(pref) => s.as_str().starts_with(pref.as_str()),
+        StrConstraint::Suffix(suff) => s.as_str().ends_with(suff.as_str()),
+        StrConstraint::Equal(s2)    => &s == &s2,
+      },
+      _ => true,
     }
   }
 }
@@ -150,7 +171,6 @@ impl<'a> Iterator for CombineIt<'a> {
               if let (ID::Variable(k), id) = (key, id) {
                 for c in self.constraints {
                   if !c.check(*k, id) {
-                    println!("constraint failed for {} -> {:?}: {:?}", k, id, c);
                     match_ids = false;
                     break;
                   }
@@ -292,6 +312,7 @@ pub fn match_preds(pred1: &Predicate, pred2: &Predicate) -> bool {
         (ID::Variable(_), _) => true,
         (ID::Literal(i), ID::Literal(ref j)) => i == j,
         (ID::Integer(i), ID::Integer(j)) => i == j,
+        (ID::Str(i), ID::Str(j)) => i == j,
         _ => false
       }
     })
@@ -444,7 +465,7 @@ mod tests {
       ],
       &[Constraint {
         id: 1234,
-        kind: ConstraintKind::Lower(1)
+        kind: ConstraintKind::Int(IntConstraint::Lower(1))
       }]
     ));
     for fact in &res {
@@ -453,6 +474,57 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![fact("join", &["abc", "AAA"]), fact("join", &["abc", "BBB"])]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+  }
+
+  #[test]
+  fn str() {
+    let mut w = World::new();
+    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+      ids: vec![ID::Integer(0), lit("app_0"), ID::Str("example.com".to_string())]}));
+    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+      ids: vec![ID::Integer(1), lit("app_1"), ID::Str("test.com".to_string())]}));
+    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+      ids: vec![ID::Integer(2), lit("app_2"), ID::Str("test.fr".to_string())]}));
+    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+      ids: vec![ID::Integer(3), lit("app_0"), ID::Str("www.example.com".to_string())]}));
+    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+      ids: vec![ID::Integer(4), lit("app_1"), ID::Str("mx.example.com".to_string())]}));
+
+
+    fn test_suffix(w: &World, suffix: &str) -> Vec<Fact> {
+      w.query_rule(constrained_rule("route suffix",
+        &[var("app_id"), ID::Variable(1234)],
+        &[pred("route", &[ID::Variable(0), var("app_id"), ID::Variable(1234)])],
+        &[Constraint {
+          id: 1234,
+          kind: ConstraintKind::Str(StrConstraint::Suffix(suffix.to_string()))
+        }]
+      ))
+    }
+
+    let res = test_suffix(&w, ".fr");
+    for fact in &res {
+      println!("\t{}", fact);
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_2"), ID::Str("test.fr".to_string())] })
+    ]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+
+    let res = test_suffix(&w, "example.com");
+    for fact in &res {
+      println!("\t{}", fact);
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_0"), ID::Str("example.com".to_string())] }),
+      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_0"), ID::Str("www.example.com".to_string())] }),
+      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_1"), ID::Str("mx.example.com".to_string())] })
+    ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
 }
