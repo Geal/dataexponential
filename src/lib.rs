@@ -9,6 +9,7 @@ use std::collections::{HashMap,HashSet};
 pub enum ID {
   Literal(String),
   Variable(String),
+  Integer(i64),
 }
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
@@ -288,6 +289,13 @@ pub fn fact(name: &str, ids: &[&str]) -> Fact {
   })
 }
 
+pub fn factnum(name: &str, ids: &[i64]) -> Fact {
+  Fact(Predicate {
+    name: name.to_string(),
+    ids: ids.iter().map(|id| ID::Integer(*id)).collect(),
+  })
+}
+
 pub fn pred(name: &str, ids: &[ID]) -> Predicate {
   Predicate {
     name: name.to_string(),
@@ -318,6 +326,7 @@ pub fn match_preds(pred1: &Predicate, pred2: &Predicate) -> bool {
         (_, ID::Variable(_)) => true,
         (ID::Variable(_), _) => true,
         (ID::Literal(i), ID::Literal(ref j)) => i == j,
+        (ID::Integer(i), ID::Integer(j)) => i == j,
         _ => false
       }
     })
@@ -433,6 +442,33 @@ mod tests {
     w.run();
     println!("siblings: {:#?}", w.query(pred("siblings", &[var("A"), var("B")])));
     */
+  }
+
+  #[test]
+  fn numbers() {
+    let mut w = World::new();
+    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(0), lit("abc")]}));
+    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(1), lit("def")]}));
+    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(2), lit("ghi")]}));
+    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(3), lit("jkl")]}));
+    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(4), lit("mno")]}));
+
+    w.facts.insert(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(0), lit("AAA"), ID::Integer(0)]}));
+    w.facts.insert(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(1), lit("BBB"), ID::Integer(0)]}));
+    w.facts.insert(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(2), lit("CCC"), ID::Integer(1)]}));
+
+    let res = w.query_rule(rule("join", &[var("left"), var("right")], &[
+      pred("t1", &[var("id"), var("left")]),
+      pred("t2", &[var("t2_id"), var("right"), var("id")])
+    ]));
+    for fact in &res {
+      println!("\t{}", fact);
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![fact("join", &["abc", "AAA"]), fact("join", &["abc", "BBB"]),
+      fact("join",&["def", "CCC"])]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
   }
 }
 
