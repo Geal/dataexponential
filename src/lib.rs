@@ -21,6 +21,12 @@ pub struct Predicate {
   pub ids: Vec<ID>,
 }
 
+impl Predicate {
+  pub fn new<N: Into<String>>(name: N, ids: &[ID]) -> Predicate {
+    Predicate { name: name.into(), ids: ids.to_vec() }
+  }
+}
+
 #[derive(Debug,Clone,PartialEq)]
 pub enum Element {
   Fact(Predicate),
@@ -30,6 +36,12 @@ pub enum Element {
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub struct Fact(pub Predicate);
+
+impl Fact {
+  pub fn new<N: Into<String>>(name: N, ids: &[ID]) -> Fact {
+    Fact(Predicate::new(name, ids))
+  }
+}
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Rule(pub Predicate, pub Vec<Predicate>, pub Vec<Constraint>);
@@ -252,17 +264,10 @@ impl MatchedVariables {
     }
   }
 }
-pub fn fact(name: &str, ids: &[&str]) -> Fact {
+pub fn fact(name: &str, ids: &[ID]) -> Fact {
   Fact(Predicate {
     name: name.to_string(),
-    ids: ids.iter().map(|id| ID::Literal(id.to_string())).collect(),
-  })
-}
-
-pub fn factnum(name: &str, ids: &[i64]) -> Fact {
-  Fact(Predicate {
-    name: name.to_string(),
-    ids: ids.iter().map(|id| ID::Integer(*id)).collect(),
+    ids: ids.to_vec(),
   })
 }
 
@@ -292,6 +297,14 @@ pub fn constrained_rule(head_name: &str, head_ids: &[ID], predicates: &[Predicat
 
 pub fn lit(name: &str) -> ID {
   ID::Literal(name.to_string())
+}
+
+pub fn int(i: i64) -> ID {
+  ID::Integer(i)
+}
+
+pub fn string(s: &str) -> ID {
+  ID::Str(s.to_string())
 }
 
 /// warning: collision risk
@@ -393,9 +406,9 @@ mod tests {
   #[test]
   fn family() {
     let mut w = World::new();
-    w.add_fact(fact("parent", &["A", "B"]));
-    w.add_fact(fact("parent", &["B", "C"]));
-    w.add_fact(fact("parent", &["C", "D"]));
+    w.add_fact(fact("parent", &[lit("A"), lit("B")]));
+    w.add_fact(fact("parent", &[lit("B"), lit("C")]));
+    w.add_fact(fact("parent", &[lit("C"), lit("D")]));
 
     let query_rule_result = w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
       pred("parent", &[var("grandparent"), var("parent")]),
@@ -418,14 +431,17 @@ mod tests {
     }
     println!("parents of B: {:?}", w.query(pred("parent", &[var("parent"), lit("B")])));
     println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
-    w.add_fact(fact("parent", &["C", "E"]));
+    w.add_fact(fact("parent", &[lit("C"), lit("E")]));
     w.run();
     let mut res = w.query(pred("grandparent", &[var("grandparent"), var("grandchild")]));
     println!("grandparents after inserting parent(C, E): {:?}", res);
 
     let res = res.drain(..).cloned().collect::<HashSet<_>>();
-    let compared = (vec![fact("grandparent", &["A", "C"]), fact("grandparent", &["B", "D"]),
-      fact("grandparent",&["B", "E"])]).drain(..).collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("grandparent", &[lit("A"), lit("C")]),
+      fact("grandparent", &[lit("B"), lit("D")]),
+      fact("grandparent", &[lit("B"), lit("E")])
+    ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res, compared);
 
     /*w.add_rule(rule("siblings", &[var("A"), var("B")], &[
@@ -441,15 +457,15 @@ mod tests {
   #[test]
   fn numbers() {
     let mut w = World::new();
-    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(0), lit("abc")]}));
-    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(1), lit("def")]}));
-    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(2), lit("ghi")]}));
-    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(3), lit("jkl")]}));
-    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(4), lit("mno")]}));
+    w.add_fact(fact("t1", &[int(0), lit("abc")]));
+    w.add_fact(fact("t1", &[int(1), lit("def")]));
+    w.add_fact(fact("t1", &[int(2), lit("ghi")]));
+    w.add_fact(fact("t1", &[int(3), lit("jkl")]));
+    w.add_fact(fact("t1", &[int(4), lit("mno")]));
 
-    w.add_fact(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(0), lit("AAA"), ID::Integer(0)]}));
-    w.add_fact(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(1), lit("BBB"), ID::Integer(0)]}));
-    w.add_fact(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(2), lit("CCC"), ID::Integer(1)]}));
+    w.add_fact(fact("t2", &[int(0), lit("AAA"), int(0)]));
+    w.add_fact(fact("t2", &[int(1), lit("BBB"), int(0)]));
+    w.add_fact(fact("t2", &[int(2), lit("CCC"), int(1)]));
 
     let res = w.query_rule(rule("join", &[var("left"), var("right")], &[
       pred("t1", &[var("id"), var("left")]),
@@ -460,8 +476,11 @@ mod tests {
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
-    let compared = (vec![fact("join", &["abc", "AAA"]), fact("join", &["abc", "BBB"]),
-      fact("join",&["def", "CCC"])]).drain(..).collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("join", &[lit("abc"), lit("AAA")]),
+      fact("join", &[lit("abc"), lit("BBB")]),
+      fact("join", &[lit("def"), lit("CCC")])
+    ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
     // test constraints
@@ -481,23 +500,21 @@ mod tests {
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
-    let compared = (vec![fact("join", &["abc", "AAA"]), fact("join", &["abc", "BBB"])]).drain(..).collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("join", &[lit("abc"), lit("AAA")]),
+      fact("join", &[lit("abc"), lit("BBB")])
+    ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
 
   #[test]
   fn str() {
     let mut w = World::new();
-    w.add_fact(Fact(Predicate { name: "route".to_string(),
-      ids: vec![ID::Integer(0), lit("app_0"), ID::Str("example.com".to_string())]}));
-    w.add_fact(Fact(Predicate { name: "route".to_string(),
-      ids: vec![ID::Integer(1), lit("app_1"), ID::Str("test.com".to_string())]}));
-    w.add_fact(Fact(Predicate { name: "route".to_string(),
-      ids: vec![ID::Integer(2), lit("app_2"), ID::Str("test.fr".to_string())]}));
-    w.add_fact(Fact(Predicate { name: "route".to_string(),
-      ids: vec![ID::Integer(3), lit("app_0"), ID::Str("www.example.com".to_string())]}));
-    w.add_fact(Fact(Predicate { name: "route".to_string(),
-      ids: vec![ID::Integer(4), lit("app_1"), ID::Str("mx.example.com".to_string())]}));
+    w.add_fact(fact("route", &[int(0), lit("app_0"), string("example.com")]));
+    w.add_fact(fact("route", &[int(1), lit("app_1"), string("test.com")]));
+    w.add_fact(fact("route", &[int(2), lit("app_2"), string("test.fr")]));
+    w.add_fact(fact("route", &[int(3), lit("app_0"), string("www.example.com")]));
+    w.add_fact(fact("route", &[int(4), lit("app_1"), string("mx.example.com")]));
 
 
     fn test_suffix(w: &World, suffix: &str) -> Vec<Fact> {
@@ -518,7 +535,7 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_2"), ID::Str("test.fr".to_string())] })
+      fact("route suffix", &[lit("app_2"), string("test.fr")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
@@ -529,9 +546,9 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_0"), ID::Str("example.com".to_string())] }),
-      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_0"), ID::Str("www.example.com".to_string())] }),
-      Fact(Predicate { name: "route suffix".to_string(), ids: vec![lit("app_1"), ID::Str("mx.example.com".to_string())] })
+      fact("route suffix", &[lit("app_0"), string("example.com")]),
+      fact("route suffix", &[lit("app_0"), string("www.example.com")]),
+      fact("route suffix", &[lit("app_1"), string("mx.example.com")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -545,29 +562,29 @@ mod bench {
   #[bench]
   fn grandparents(b: &mut Bencher) {
     let mut w = World::new();
-    w.add_fact(fact("parent", &["A", "B"]));
-    w.add_fact(fact("parent", &["B", "C"]));
-    w.add_fact(fact("parent", &["C", "D"]));
-    w.add_fact(fact("parent", &["C", "E"]));
-    w.add_fact(fact("parent", &["X", "C"]));
-    w.add_fact(fact("parent", &["Y", "B"]));
-    w.add_fact(fact("parent", &["A", "0"]));
-    w.add_fact(fact("parent", &["A", "1"]));
-    w.add_fact(fact("parent", &["A", "2"]));
-    w.add_fact(fact("parent", &["A", "3"]));
-    w.add_fact(fact("parent", &["A", "4"]));
+    w.add_fact(fact("parent", &[lit("A"), lit("B")]));
+    w.add_fact(fact("parent", &[lit("B"), lit("C")]));
+    w.add_fact(fact("parent", &[lit("C"), lit("D")]));
+    w.add_fact(fact("parent", &[lit("C"), lit("E")]));
+    w.add_fact(fact("parent", &[lit("X"), lit("C")]));
+    w.add_fact(fact("parent", &[lit("Y"), lit("B")]));
+    w.add_fact(fact("parent", &[lit("A"), lit("0")]));
+    w.add_fact(fact("parent", &[lit("A"), lit("1")]));
+    w.add_fact(fact("parent", &[lit("A"), lit("2")]));
+    w.add_fact(fact("parent", &[lit("A"), lit("3")]));
+    w.add_fact(fact("parent", &[lit("A"), lit("4")]));
 
-    w.add_fact(fact("parent", &["AA", "AB"]));
-    w.add_fact(fact("parent", &["AB", "AC"]));
-    w.add_fact(fact("parent", &["AC", "AD"]));
-    w.add_fact(fact("parent", &["AC", "AE"]));
-    w.add_fact(fact("parent", &["AX", "AC"]));
-    w.add_fact(fact("parent", &["AY", "AB"]));
-    w.add_fact(fact("parent", &["AA", "0"]));
-    w.add_fact(fact("parent", &["AA", "1"]));
-    w.add_fact(fact("parent", &["AA", "2"]));
-    w.add_fact(fact("parent", &["AA", "3"]));
-    w.add_fact(fact("parent", &["AA", "4"]));
+    w.add_fact(fact("parent", &[lit("AA"), lit("AB")]));
+    w.add_fact(fact("parent", &[lit("AB"), lit("AC")]));
+    w.add_fact(fact("parent", &[lit("AC"), lit("AD")]));
+    w.add_fact(fact("parent", &[lit("AC"), lit("AE")]));
+    w.add_fact(fact("parent", &[lit("AX"), lit("AC")]));
+    w.add_fact(fact("parent", &[lit("AY"), lit("AB")]));
+    w.add_fact(fact("parent", &[lit("AA"), lit("0")]));
+    w.add_fact(fact("parent", &[lit("AA"), lit("1")]));
+    w.add_fact(fact("parent", &[lit("AA"), lit("2")]));
+    w.add_fact(fact("parent", &[lit("AA"), lit("3")]));
+    w.add_fact(fact("parent", &[lit("AA"), lit("4")]));
 
     b.iter(|| {
       w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
@@ -580,12 +597,12 @@ mod bench {
   #[bench]
   fn ancestor(b: &mut Bencher) {
     let mut w = World::new();
-    w.add_fact(fact("parent", &["A", "B"]));
-    w.add_fact(fact("parent", &["B", "C"]));
-    w.add_fact(fact("parent", &["C", "D"]));
-    w.add_fact(fact("parent", &["C", "E"]));
-    w.add_fact(fact("parent", &["X", "C"]));
-    w.add_fact(fact("parent", &["Y", "B"]));
+    w.add_fact(fact("parent", &[lit("A"), lit("B")]));
+    w.add_fact(fact("parent", &[lit("B"), lit("C")]));
+    w.add_fact(fact("parent", &[lit("C"), lit("D")]));
+    w.add_fact(fact("parent", &[lit("C"), lit("E")]));
+    w.add_fact(fact("parent", &[lit("X"), lit("C")]));
+    w.add_fact(fact("parent", &[lit("Y"), lit("B")]));
     w.add_rule(rule("ancestor", &[var("older"), var("younger")], &[
       pred("parent", &[var("older"), var("younger")])
     ]));
