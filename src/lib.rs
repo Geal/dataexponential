@@ -384,6 +384,8 @@ impl World {
             match (fid, pid) {
               (ID::Literal(_), ID::Variable(_)) => true,
               (ID::Literal(i), ID::Literal(ref j)) => i == j,
+              (ID::Int(i), ID::Int(ref j)) => i == j,
+              (ID::Str(i), ID::Str(ref j)) => i == j,
               _ => false
             }
           })
