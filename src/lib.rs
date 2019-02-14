@@ -333,6 +333,14 @@ impl World {
     }
   }
 
+  pub fn add_fact(&mut self, fact: Fact) {
+    self.facts.insert(fact);
+  }
+
+  pub fn add_rule(&mut self, rule: Rule) {
+    self.rules.push(rule);
+  }
+
   pub fn run(&mut self) {
     let mut index = 0;
     loop {
@@ -385,9 +393,9 @@ mod tests {
   #[test]
   fn family() {
     let mut w = World::new();
-    w.facts.insert(fact("parent", &["A", "B"]));
-    w.facts.insert(fact("parent", &["B", "C"]));
-    w.facts.insert(fact("parent", &["C", "D"]));
+    w.add_fact(fact("parent", &["A", "B"]));
+    w.add_fact(fact("parent", &["B", "C"]));
+    w.add_fact(fact("parent", &["C", "D"]));
 
     let query_rule_result = w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
       pred("parent", &[var("grandparent"), var("parent")]),
@@ -396,7 +404,7 @@ mod tests {
     println!("grandparents query_rules: {:?}", query_rule_result);
     println!("current facts: {:?}", w.facts);
 
-    w.rules.push(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
+    w.add_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
       pred("parent", &[var("grandparent"), var("parent")]),
       pred("parent", &[var("parent"), var("grandchild")])
     ]));
@@ -410,7 +418,7 @@ mod tests {
     }
     println!("parents of B: {:?}", w.query(pred("parent", &[var("parent"), lit("B")])));
     println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
-    w.facts.insert(fact("parent", &["C", "E"]));
+    w.add_fact(fact("parent", &["C", "E"]));
     w.run();
     let mut res = w.query(pred("grandparent", &[var("grandparent"), var("grandchild")]));
     println!("grandparents after inserting parent(C, E): {:?}", res);
@@ -420,7 +428,7 @@ mod tests {
       fact("grandparent",&["B", "E"])]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res, compared);
 
-    /*w.rules.push(rule("siblings", &[var("A"), var("B")], &[
+    /*w.add_rule(rule("siblings", &[var("A"), var("B")], &[
       pred("parent", &[var("parent"), var("A")]),
       pred("parent", &[var("parent"), var("B")])
     ]));
@@ -433,15 +441,15 @@ mod tests {
   #[test]
   fn numbers() {
     let mut w = World::new();
-    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(0), lit("abc")]}));
-    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(1), lit("def")]}));
-    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(2), lit("ghi")]}));
-    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(3), lit("jkl")]}));
-    w.facts.insert(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(4), lit("mno")]}));
+    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(0), lit("abc")]}));
+    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(1), lit("def")]}));
+    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(2), lit("ghi")]}));
+    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(3), lit("jkl")]}));
+    w.add_fact(Fact(Predicate { name: "t1".to_string(), ids: vec![ID::Integer(4), lit("mno")]}));
 
-    w.facts.insert(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(0), lit("AAA"), ID::Integer(0)]}));
-    w.facts.insert(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(1), lit("BBB"), ID::Integer(0)]}));
-    w.facts.insert(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(2), lit("CCC"), ID::Integer(1)]}));
+    w.add_fact(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(0), lit("AAA"), ID::Integer(0)]}));
+    w.add_fact(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(1), lit("BBB"), ID::Integer(0)]}));
+    w.add_fact(Fact(Predicate { name: "t2".to_string(), ids: vec![ID::Integer(2), lit("CCC"), ID::Integer(1)]}));
 
     let res = w.query_rule(rule("join", &[var("left"), var("right")], &[
       pred("t1", &[var("id"), var("left")]),
@@ -480,15 +488,15 @@ mod tests {
   #[test]
   fn str() {
     let mut w = World::new();
-    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+    w.add_fact(Fact(Predicate { name: "route".to_string(),
       ids: vec![ID::Integer(0), lit("app_0"), ID::Str("example.com".to_string())]}));
-    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+    w.add_fact(Fact(Predicate { name: "route".to_string(),
       ids: vec![ID::Integer(1), lit("app_1"), ID::Str("test.com".to_string())]}));
-    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+    w.add_fact(Fact(Predicate { name: "route".to_string(),
       ids: vec![ID::Integer(2), lit("app_2"), ID::Str("test.fr".to_string())]}));
-    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+    w.add_fact(Fact(Predicate { name: "route".to_string(),
       ids: vec![ID::Integer(3), lit("app_0"), ID::Str("www.example.com".to_string())]}));
-    w.facts.insert(Fact(Predicate { name: "route".to_string(),
+    w.add_fact(Fact(Predicate { name: "route".to_string(),
       ids: vec![ID::Integer(4), lit("app_1"), ID::Str("mx.example.com".to_string())]}));
 
 
@@ -537,29 +545,29 @@ mod bench {
   #[bench]
   fn grandparents(b: &mut Bencher) {
     let mut w = World::new();
-    w.facts.insert(fact("parent", &["A", "B"]));
-    w.facts.insert(fact("parent", &["B", "C"]));
-    w.facts.insert(fact("parent", &["C", "D"]));
-    w.facts.insert(fact("parent", &["C", "E"]));
-    w.facts.insert(fact("parent", &["X", "C"]));
-    w.facts.insert(fact("parent", &["Y", "B"]));
-    w.facts.insert(fact("parent", &["A", "0"]));
-    w.facts.insert(fact("parent", &["A", "1"]));
-    w.facts.insert(fact("parent", &["A", "2"]));
-    w.facts.insert(fact("parent", &["A", "3"]));
-    w.facts.insert(fact("parent", &["A", "4"]));
+    w.add_fact(fact("parent", &["A", "B"]));
+    w.add_fact(fact("parent", &["B", "C"]));
+    w.add_fact(fact("parent", &["C", "D"]));
+    w.add_fact(fact("parent", &["C", "E"]));
+    w.add_fact(fact("parent", &["X", "C"]));
+    w.add_fact(fact("parent", &["Y", "B"]));
+    w.add_fact(fact("parent", &["A", "0"]));
+    w.add_fact(fact("parent", &["A", "1"]));
+    w.add_fact(fact("parent", &["A", "2"]));
+    w.add_fact(fact("parent", &["A", "3"]));
+    w.add_fact(fact("parent", &["A", "4"]));
 
-    w.facts.insert(fact("parent", &["AA", "AB"]));
-    w.facts.insert(fact("parent", &["AB", "AC"]));
-    w.facts.insert(fact("parent", &["AC", "AD"]));
-    w.facts.insert(fact("parent", &["AC", "AE"]));
-    w.facts.insert(fact("parent", &["AX", "AC"]));
-    w.facts.insert(fact("parent", &["AY", "AB"]));
-    w.facts.insert(fact("parent", &["AA", "0"]));
-    w.facts.insert(fact("parent", &["AA", "1"]));
-    w.facts.insert(fact("parent", &["AA", "2"]));
-    w.facts.insert(fact("parent", &["AA", "3"]));
-    w.facts.insert(fact("parent", &["AA", "4"]));
+    w.add_fact(fact("parent", &["AA", "AB"]));
+    w.add_fact(fact("parent", &["AB", "AC"]));
+    w.add_fact(fact("parent", &["AC", "AD"]));
+    w.add_fact(fact("parent", &["AC", "AE"]));
+    w.add_fact(fact("parent", &["AX", "AC"]));
+    w.add_fact(fact("parent", &["AY", "AB"]));
+    w.add_fact(fact("parent", &["AA", "0"]));
+    w.add_fact(fact("parent", &["AA", "1"]));
+    w.add_fact(fact("parent", &["AA", "2"]));
+    w.add_fact(fact("parent", &["AA", "3"]));
+    w.add_fact(fact("parent", &["AA", "4"]));
 
     b.iter(|| {
       w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
@@ -572,16 +580,16 @@ mod bench {
   #[bench]
   fn ancestor(b: &mut Bencher) {
     let mut w = World::new();
-    w.facts.insert(fact("parent", &["A", "B"]));
-    w.facts.insert(fact("parent", &["B", "C"]));
-    w.facts.insert(fact("parent", &["C", "D"]));
-    w.facts.insert(fact("parent", &["C", "E"]));
-    w.facts.insert(fact("parent", &["X", "C"]));
-    w.facts.insert(fact("parent", &["Y", "B"]));
-    w.rules.push(rule("ancestor", &[var("older"), var("younger")], &[
+    w.add_fact(fact("parent", &["A", "B"]));
+    w.add_fact(fact("parent", &["B", "C"]));
+    w.add_fact(fact("parent", &["C", "D"]));
+    w.add_fact(fact("parent", &["C", "E"]));
+    w.add_fact(fact("parent", &["X", "C"]));
+    w.add_fact(fact("parent", &["Y", "B"]));
+    w.add_rule(rule("ancestor", &[var("older"), var("younger")], &[
       pred("parent", &[var("older"), var("younger")])
     ]));
-    w.rules.push(rule("ancestor", &[var("older"), var("younger")], &[
+    w.add_rule(rule("ancestor", &[var("older"), var("younger")], &[
       pred("parent", &[var("older"), var("middle")]),
       pred("ancestor", &[var("middle"), var("younger")])
     ]));
