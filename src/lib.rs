@@ -9,7 +9,7 @@ use sha2::{Sha256, Digest};
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub enum ID {
-  Literal(String),
+  Symbol(u64),
   Variable(u32),
   Integer(i64),
   Str(String),
@@ -80,7 +80,7 @@ impl Constraint {
 
     match (id, &self.kind) {
       (ID::Variable(_), _) => panic!("should not check constraint on a variable"),
-      (ID::Literal(_), _) => true,
+      (ID::Symbol(_), _) => true,
       (ID::Integer(i), ConstraintKind::Int(c)) => match c {
         IntConstraint::Lower(j)  => *i < *j,
         IntConstraint::Larger(j) => *i > *j,
@@ -295,8 +295,9 @@ pub fn constrained_rule(head_name: &str, head_ids: &[ID], predicates: &[Predicat
   )
 }
 
-pub fn lit(name: &str) -> ID {
-  ID::Literal(name.to_string())
+pub fn sym(table: &mut SymbolTable, name: &str) -> ID {
+  let id = table.insert(name);
+  ID::Symbol(id)
 }
 
 pub fn int(i: i64) -> ID {
@@ -323,7 +324,7 @@ pub fn match_preds(pred1: &Predicate, pred2: &Predicate) -> bool {
       match (fid, pid) {
         (_, ID::Variable(_)) => true,
         (ID::Variable(_), _) => true,
-        (ID::Literal(i), ID::Literal(ref j)) => i == j,
+        (ID::Symbol(i), ID::Symbol(ref j)) => i == j,
         (ID::Integer(i), ID::Integer(j)) => i == j,
         (ID::Str(i), ID::Str(j)) => i == j,
         _ => false
@@ -382,9 +383,9 @@ impl World {
       &f.0.name == &pred.name &&
           f.0.ids.iter().zip(&pred.ids).all(|(fid, pid)| {
             match (fid, pid) {
-              (ID::Literal(_), ID::Variable(_)) => true,
-              (ID::Literal(i), ID::Literal(ref j)) => i == j,
-              (ID::Int(i), ID::Int(ref j)) => i == j,
+              (ID::Symbol(_), ID::Variable(_)) => true,
+              (ID::Symbol(i), ID::Symbol(ref j)) => i == j,
+              (ID::Integer(i), ID::Integer(ref j)) => i == j,
               (ID::Str(i), ID::Str(ref j)) => i == j,
               _ => false
             }
@@ -401,6 +402,38 @@ impl World {
   }
 }
 
+pub struct SymbolTable {
+  symbols: Vec<String>,
+}
+
+impl SymbolTable {
+  pub fn new() -> Self {
+    SymbolTable { symbols: Vec::new() }
+  }
+
+  pub fn insert(&mut self, s: &str) -> u64 {
+    match self.symbols.iter().position(|sym| sym.as_str() == s) {
+      Some(index) => index as u64,
+      None => {
+        self.symbols.push(s.to_string());
+        (self.symbols.len() - 1) as u64
+      }
+    }
+  }
+
+  pub fn print_fact(&self, f: &Fact) -> String {
+    let strings = f.0.ids.iter().map(|id| {
+        match id {
+          ID::Variable(_) => panic!("a fact should not contain a variable"),
+          ID::Integer(i) => i.to_string(),
+          ID::Str(s) => s.clone(),
+          ID::Symbol(index) => format!("#{}", self.symbols[*index as usize]),
+        }
+      }).collect::<Vec<_>>();
+    format!("fact({}, {})", f.0.name, strings.join(", "))
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -408,9 +441,11 @@ mod tests {
   #[test]
   fn family() {
     let mut w = World::new();
-    w.add_fact(fact("parent", &[lit("A"), lit("B")]));
-    w.add_fact(fact("parent", &[lit("B"), lit("C")]));
-    w.add_fact(fact("parent", &[lit("C"), lit("D")]));
+    let mut syms = SymbolTable::new();
+
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "B")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "B"), sym(&mut syms, "C")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "C"), sym(&mut syms, "D")]));
 
     let query_rule_result = w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
       pred("parent", &[var("grandparent"), var("parent")]),
@@ -429,20 +464,21 @@ mod tests {
     println!("parents:");
     let res = w.query(pred("parent", &[var("parent"), var("child")]));
     for fact in res {
-      println!("\t{}", fact);
+      println!("\t{}", syms.print_fact(fact));
     }
-    println!("parents of B: {:?}", w.query(pred("parent", &[var("parent"), lit("B")])));
+
+    println!("parents of B: {:?}", w.query(pred("parent", &[var("parent"), sym(&mut syms, "B")])));
     println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
-    w.add_fact(fact("parent", &[lit("C"), lit("E")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "C"), sym(&mut syms, "E")]));
     w.run();
     let mut res = w.query(pred("grandparent", &[var("grandparent"), var("grandchild")]));
     println!("grandparents after inserting parent(C, E): {:?}", res);
 
     let res = res.drain(..).cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("grandparent", &[lit("A"), lit("C")]),
-      fact("grandparent", &[lit("B"), lit("D")]),
-      fact("grandparent", &[lit("B"), lit("E")])
+      fact("grandparent", &[sym(&mut syms, "A"), sym(&mut syms, "C")]),
+      fact("grandparent", &[sym(&mut syms, "B"), sym(&mut syms, "D")]),
+      fact("grandparent", &[sym(&mut syms, "B"), sym(&mut syms, "E")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res, compared);
 
@@ -459,29 +495,31 @@ mod tests {
   #[test]
   fn numbers() {
     let mut w = World::new();
-    w.add_fact(fact("t1", &[int(0), lit("abc")]));
-    w.add_fact(fact("t1", &[int(1), lit("def")]));
-    w.add_fact(fact("t1", &[int(2), lit("ghi")]));
-    w.add_fact(fact("t1", &[int(3), lit("jkl")]));
-    w.add_fact(fact("t1", &[int(4), lit("mno")]));
+    let mut syms = SymbolTable::new();
 
-    w.add_fact(fact("t2", &[int(0), lit("AAA"), int(0)]));
-    w.add_fact(fact("t2", &[int(1), lit("BBB"), int(0)]));
-    w.add_fact(fact("t2", &[int(2), lit("CCC"), int(1)]));
+    w.add_fact(fact("t1", &[int(0), sym(&mut syms, "abc")]));
+    w.add_fact(fact("t1", &[int(1), sym(&mut syms, "def")]));
+    w.add_fact(fact("t1", &[int(2), sym(&mut syms, "ghi")]));
+    w.add_fact(fact("t1", &[int(3), sym(&mut syms, "jkl")]));
+    w.add_fact(fact("t1", &[int(4), sym(&mut syms, "mno")]));
+
+    w.add_fact(fact("t2", &[int(0), sym(&mut syms, "AAA"), int(0)]));
+    w.add_fact(fact("t2", &[int(1), sym(&mut syms, "BBB"), int(0)]));
+    w.add_fact(fact("t2", &[int(2), sym(&mut syms, "CCC"), int(1)]));
 
     let res = w.query_rule(rule("join", &[var("left"), var("right")], &[
       pred("t1", &[var("id"), var("left")]),
       pred("t2", &[var("t2_id"), var("right"), var("id")])
     ]));
     for fact in &res {
-      println!("\t{}", fact);
+      println!("\t{}", syms.print_fact(fact));
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("join", &[lit("abc"), lit("AAA")]),
-      fact("join", &[lit("abc"), lit("BBB")]),
-      fact("join", &[lit("def"), lit("CCC")])
+      fact("join", &[sym(&mut syms, "abc"), sym(&mut syms, "AAA")]),
+      fact("join", &[sym(&mut syms, "abc"), sym(&mut syms, "BBB")]),
+      fact("join", &[sym(&mut syms, "def"), sym(&mut syms, "CCC")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
@@ -498,13 +536,13 @@ mod tests {
       }]
     ));
     for fact in &res {
-      println!("\t{}", fact);
+      println!("\t{}", syms.print_fact(fact));
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("join", &[lit("abc"), lit("AAA")]),
-      fact("join", &[lit("abc"), lit("BBB")])
+      fact("join", &[sym(&mut syms, "abc"), sym(&mut syms, "AAA")]),
+      fact("join", &[sym(&mut syms, "abc"), sym(&mut syms, "BBB")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -512,11 +550,13 @@ mod tests {
   #[test]
   fn str() {
     let mut w = World::new();
-    w.add_fact(fact("route", &[int(0), lit("app_0"), string("example.com")]));
-    w.add_fact(fact("route", &[int(1), lit("app_1"), string("test.com")]));
-    w.add_fact(fact("route", &[int(2), lit("app_2"), string("test.fr")]));
-    w.add_fact(fact("route", &[int(3), lit("app_0"), string("www.example.com")]));
-    w.add_fact(fact("route", &[int(4), lit("app_1"), string("mx.example.com")]));
+    let mut syms = SymbolTable::new();
+
+    w.add_fact(fact("route", &[int(0), sym(&mut syms, "app_0"), string("example.com")]));
+    w.add_fact(fact("route", &[int(1), sym(&mut syms, "app_1"), string("test.com")]));
+    w.add_fact(fact("route", &[int(2), sym(&mut syms, "app_2"), string("test.fr")]));
+    w.add_fact(fact("route", &[int(3), sym(&mut syms, "app_0"), string("www.example.com")]));
+    w.add_fact(fact("route", &[int(4), sym(&mut syms, "app_1"), string("mx.example.com")]));
 
 
     fn test_suffix(w: &World, suffix: &str) -> Vec<Fact> {
@@ -532,25 +572,25 @@ mod tests {
 
     let res = test_suffix(&w, ".fr");
     for fact in &res {
-      println!("\t{}", fact);
+      println!("\t{}", syms.print_fact(fact));
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("route suffix", &[lit("app_2"), string("test.fr")])
+      fact("route suffix", &[sym(&mut syms, "app_2"), string("test.fr")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
     let res = test_suffix(&w, "example.com");
     for fact in &res {
-      println!("\t{}", fact);
+      println!("\t{}", syms.print_fact(fact));
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("route suffix", &[lit("app_0"), string("example.com")]),
-      fact("route suffix", &[lit("app_0"), string("www.example.com")]),
-      fact("route suffix", &[lit("app_1"), string("mx.example.com")])
+      fact("route suffix", &[sym(&mut syms, "app_0"), string("example.com")]),
+      fact("route suffix", &[sym(&mut syms, "app_0"), string("www.example.com")]),
+      fact("route suffix", &[sym(&mut syms, "app_1"), string("mx.example.com")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -564,29 +604,31 @@ mod bench {
   #[bench]
   fn grandparents(b: &mut Bencher) {
     let mut w = World::new();
-    w.add_fact(fact("parent", &[lit("A"), lit("B")]));
-    w.add_fact(fact("parent", &[lit("B"), lit("C")]));
-    w.add_fact(fact("parent", &[lit("C"), lit("D")]));
-    w.add_fact(fact("parent", &[lit("C"), lit("E")]));
-    w.add_fact(fact("parent", &[lit("X"), lit("C")]));
-    w.add_fact(fact("parent", &[lit("Y"), lit("B")]));
-    w.add_fact(fact("parent", &[lit("A"), lit("0")]));
-    w.add_fact(fact("parent", &[lit("A"), lit("1")]));
-    w.add_fact(fact("parent", &[lit("A"), lit("2")]));
-    w.add_fact(fact("parent", &[lit("A"), lit("3")]));
-    w.add_fact(fact("parent", &[lit("A"), lit("4")]));
+    let mut syms = SymbolTable::new();
 
-    w.add_fact(fact("parent", &[lit("AA"), lit("AB")]));
-    w.add_fact(fact("parent", &[lit("AB"), lit("AC")]));
-    w.add_fact(fact("parent", &[lit("AC"), lit("AD")]));
-    w.add_fact(fact("parent", &[lit("AC"), lit("AE")]));
-    w.add_fact(fact("parent", &[lit("AX"), lit("AC")]));
-    w.add_fact(fact("parent", &[lit("AY"), lit("AB")]));
-    w.add_fact(fact("parent", &[lit("AA"), lit("0")]));
-    w.add_fact(fact("parent", &[lit("AA"), lit("1")]));
-    w.add_fact(fact("parent", &[lit("AA"), lit("2")]));
-    w.add_fact(fact("parent", &[lit("AA"), lit("3")]));
-    w.add_fact(fact("parent", &[lit("AA"), lit("4")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "B")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "B"), sym(&mut syms, "C")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "C"), sym(&mut syms, "D")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "C"), sym(&mut syms, "E")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "X"), sym(&mut syms, "C")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "Y"), sym(&mut syms, "B")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "0")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "1")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "2")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "3")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "4")]));
+
+    w.add_fact(fact("parent", &[sym(&mut syms, "AA"), sym(&mut syms, "AB")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AB"), sym(&mut syms, "AC")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AC"), sym(&mut syms, "AD")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AC"), sym(&mut syms, "AE")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AX"), sym(&mut syms, "AC")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AY"), sym(&mut syms, "AB")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AA"), sym(&mut syms, "0")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AA"), sym(&mut syms, "1")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AA"), sym(&mut syms, "2")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AA"), sym(&mut syms, "3")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "AA"), sym(&mut syms, "4")]));
 
     b.iter(|| {
       w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
@@ -599,12 +641,14 @@ mod bench {
   #[bench]
   fn ancestor(b: &mut Bencher) {
     let mut w = World::new();
-    w.add_fact(fact("parent", &[lit("A"), lit("B")]));
-    w.add_fact(fact("parent", &[lit("B"), lit("C")]));
-    w.add_fact(fact("parent", &[lit("C"), lit("D")]));
-    w.add_fact(fact("parent", &[lit("C"), lit("E")]));
-    w.add_fact(fact("parent", &[lit("X"), lit("C")]));
-    w.add_fact(fact("parent", &[lit("Y"), lit("B")]));
+    let mut syms = SymbolTable::new();
+
+    w.add_fact(fact("parent", &[sym(&mut syms, "A"), sym(&mut syms, "B")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "B"), sym(&mut syms, "C")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "C"), sym(&mut syms, "D")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "C"), sym(&mut syms, "E")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "X"), sym(&mut syms, "C")]));
+    w.add_fact(fact("parent", &[sym(&mut syms, "Y"), sym(&mut syms, "B")]));
     w.add_rule(rule("ancestor", &[var("older"), var("younger")], &[
       pred("parent", &[var("older"), var("younger")])
     ]));
