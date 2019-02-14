@@ -7,6 +7,8 @@ use std::fmt;
 use std::collections::{HashMap,HashSet};
 use sha2::{Sha256, Digest};
 
+mod biscuit;
+
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub enum ID {
   Symbol(u64),
