@@ -70,6 +70,7 @@ impl Rule {
   }
 }
 
+/// recursive iterator for rule application
 pub struct CombineIt<'a> {
   variables: MatchedVariables,
   predicates: &'a [Predicate],
@@ -95,6 +96,7 @@ impl<'a> Iterator for CombineIt<'a> {
   type Item = HashMap<String, ID>;
 
   fn next(&mut self) -> Option<HashMap<String,ID>> {
+    // if we're the last iterator in the recursive chain, stop here
     if self.predicates.is_empty() {
       return self.variables.complete();
     }
@@ -102,10 +104,13 @@ impl<'a> Iterator for CombineIt<'a> {
     loop {
 
       if self.current_it.is_none() {
+        //fix the first predicate
         let pred = &self.predicates[0];
 
         loop {
           if let Some(current_fact) = self.current_facts.next() {
+            // create a new MatchedVariables in which we fix variables we could unify
+            // from our first predicate and the current fact
             let mut vars = self.variables.clone();
             let mut match_ids = true;
             for (key, id) in pred.ids.iter().zip(&current_fact.0.ids) {
@@ -128,6 +133,8 @@ impl<'a> Iterator for CombineIt<'a> {
                 continue;
               }
             } else {
+              // create a new iterator with the matched variables, the rest of the predicates,
+              // and all of the facts
               self.current_it = Some(Box::new(CombineIt::new(vars, &self.predicates[1..], &self.all_facts)));
             }
             break;
