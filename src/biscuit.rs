@@ -27,7 +27,7 @@ impl World {
     }
 
     //remove authority rules: we cannot create facts anymore in authority scope
-    w.rules.clear();
+    //w.rules.clear();
 
     for fact in ambient_facts.drain(..) {
       if fact.0.ids[0] != ID::Symbol(ambient_index) {
@@ -37,11 +37,14 @@ impl World {
       w.facts.insert(fact);
     }
 
-    for rule in ambient_rules.drain(..) {
+    for rule in ambient_rules.iter().cloned() {
       w.rules.push(rule);
     }
 
     w.run();
+
+    // we only keep the verifier rules
+    w.rules = ambient_rules;
 
     w
   }
@@ -266,57 +269,69 @@ mod tests {
     assert!(!res.is_empty());
   }
 
-  /*
   /// example 4 from https://github.com/CleverCloud/biscuit/issues/11#issuecomment-460989277
   #[test]
   fn example4_multiple_verifiers() {
     let mut syms = SymbolTable::new();
     let authority = syms.add("authority");
     let ambient = syms.add("ambient");
+    let myorg = syms.add("myorg");
+    let myapp = syms.add("myapp");
+    let myapp2 = syms.add("myapp2");
+    let read = syms.add("read");
+    let write = syms.add("write");
+    let deploy = syms.add("deploy");
+    let undeploy = syms.add("undeploy");
+    let read_id = syms.insert("read");
+    let write_id = syms.insert("write");
+    let deploy_id = syms.insert("deploy");
+
 
     let authority_facts = vec![
-      fact("organisation", &[authority, sym(&mut syms, "myorg")]),
-      fact("owner", &[authority, sym(&mut syms, "myorg"), sym(&mut syms, "myapp")]),
-      fact("owner", &[authority, sym(&mut syms, "myorg"), sym(&mut syms, "myapp2")]),
+      fact("organisation", &[&authority, &myorg]),
+      fact("owner", &[&authority, &myorg, &myapp]),
+      fact("owner", &[&authority, &myorg, &myapp2]),
     ];
     let authority_rules = vec![
-      rule("right", &[authority, var("X"), sym(&mut syms, "read")], &[
-        pred("resource", &[ambient, var("X")]),
-        pred("owner", &[ambient, var("Y"), var("X")])
-      ]),
-      rule("right", &[authority, var("X"), sym(&mut syms, "write")], &[
-        pred("resource", &[ambient, var("X")]),
-        pred("owner", &[ambient, var("Y"), var("X")])
+      // this rule will generate a "right" fact only if there's the correct combination of
+      // authority and ambient facts
+      constrained_rule("right", &[&authority, &var("X"), &ID::Variable(0)], &[
+        pred("application", &[&ambient, &var("X")]),
+        pred("owner", &[&authority, &myorg, &var("X")]),
+        pred("operation", &[&ambient, &ID::Variable(0)]),
+      ],
+      &[
+        Constraint {
+          id: 0,
+          kind: ConstraintKind::Symbol(SymbolConstraint::In([read_id, write_id, deploy_id].iter().cloned().collect()))
+        }
       ]),
     ];
 
-    let caveat1 = constrained_rule("caveat1", &[], &[
-        pred("application", &[ambient, sym(&mut syms, "myapp")]),
-        pred("operation", &[ambient, var("X")]),
-        pred("right", &[authority, sym(&mut syms, "myapp"), var("X")]),
+    let caveat1 = rule("caveat1", &[var("X")], &[
+        pred("application", &[&ambient, &myapp]),
+        pred("operation", &[&ambient, &var("X")]),
+        pred("right", &[&authority, &myapp, &var("X")]),
       ],
-      &[FIXME: implement set inclusion
-           Constraint {
-        id: 1234,
-        kind: ConstraintKind::Str(StrConstraint::Prefix("/folder/".to_string()))
-      }]
     );
 
     {
       // Verifier1
       let ambient_facts1 = vec![
+        fact("application", &[&ambient, &myapp]),
+        fact("operation", &[&ambient, &deploy]),
       ];
       let ambient_rules1 = vec![];
 
-      let syms1 = syms.clone();
+      let mut syms1 = syms.clone();
 
-      let w1 = World::biscuit_create(&mut syms1, authority_facts, authority_rules,
+      let w1 = World::biscuit_create(&mut syms1, authority_facts.clone(), authority_rules.clone(),
         ambient_facts1, ambient_rules1);
       for fact in w1.facts.iter() {
-        println!("\t{}", syms1.print_fact(fact));
+        println!("verifier 1: {}", syms1.print_fact(fact));
       }
 
-      let res = w1.query_rule(caveat1);
+      let res = w1.query_rule(caveat1.clone());
 
       println!("verifier 1, caveat 1 results:");
       for fact in res.iter() {
@@ -329,26 +344,27 @@ mod tests {
     {
       // Verifier2
       let ambient_facts2 = vec![
+        fact("application", &[&ambient, &myapp]),
+        fact("operation", &[&ambient, &undeploy]),
       ];
       let ambient_rules2 = vec![];
 
-      let syms2 = syms.clone();
+      let mut syms2 = syms.clone();
 
-      let w2 = World::biscuit_create(&mut syms2, authority_facts, authority_rules,
+      let w2 = World::biscuit_create(&mut syms2, authority_facts.clone(), authority_rules.clone(),
         ambient_facts2, ambient_rules2);
       for fact in w2.facts.iter() {
-        println!("\t{}", syms2.print_fact(fact));
+        println!("verifier 2: {}", syms2.print_fact(fact));
       }
 
-      let res = w2.query_rule(caveat1);
+      let res = w2.query_rule(caveat1.clone());
 
       println!("verifier2, caveat 1 results:");
       for fact in res.iter() {
         println!("\t{}", syms2.print_fact(fact));
       }
 
-      assert!(!res.is_empty());
+      assert!(res.is_empty());
     }
   }
-  */
 }
