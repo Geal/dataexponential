@@ -85,6 +85,7 @@ pub enum ConstraintKind {
   Int(IntConstraint),
   Str(StrConstraint),
   Date(DateConstraint),
+  Symbol(SymbolConstraint),
 }
 
 #[derive(Debug,Clone,PartialEq)]
@@ -92,6 +93,8 @@ pub enum IntConstraint {
   Lower(i64),
   Larger(i64),
   Equal(i64),
+  In(HashSet<i64>),
+  NotIn(HashSet<i64>),
 }
 
 #[derive(Debug,Clone,PartialEq)]
@@ -99,12 +102,20 @@ pub enum StrConstraint {
   Prefix(String),
   Suffix(String),
   Equal(String),
+  In(HashSet<String>),
+  NotIn(HashSet<String>),
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum DateConstraint {
   Before(u64),
   After(u64),
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum SymbolConstraint {
+  In(HashSet<u64>),
+  NotIn(HashSet<u64>),
 }
 
 impl Constraint {
@@ -115,21 +126,28 @@ impl Constraint {
 
     match (id, &self.kind) {
       (ID::Variable(_), _) => panic!("should not check constraint on a variable"),
-      (ID::Symbol(_), _) => false,
       (ID::Integer(i), ConstraintKind::Int(c)) => match c {
         IntConstraint::Lower(j)  => *i < *j,
         IntConstraint::Larger(j) => *i > *j,
         IntConstraint::Equal(j)  => *i == *j,
+        IntConstraint::In(h)     => h.contains(i),
+        IntConstraint::NotIn(h)  => !h.contains(i),
       },
       (ID::Str(s), ConstraintKind::Str(c)) => match c {
         StrConstraint::Prefix(pref) => s.as_str().starts_with(pref.as_str()),
         StrConstraint::Suffix(suff) => s.as_str().ends_with(suff.as_str()),
         StrConstraint::Equal(s2)    => &s == &s2,
+        StrConstraint::In(h)        => h.contains(s),
+        StrConstraint::NotIn(h)     => !h.contains(s),
       },
       (ID::Date(d), ConstraintKind::Date(c)) => match c {
         DateConstraint::Before(b) => d <=b,
         DateConstraint::After(b) => d >= b,
-      }
+      },
+      (ID::Symbol(s), ConstraintKind::Symbol(c)) => match c {
+        SymbolConstraint::In(h)    => h.contains(s),
+        SymbolConstraint::NotIn(h) => !h.contains(s),
+      },
       _ => false,
     }
   }
@@ -739,6 +757,87 @@ mod tests {
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
       fact("after", &[&date(&t3), &def]),
+    ]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+  }
+
+  #[test]
+  fn set_constraint() {
+    let mut w = World::new();
+    let mut syms = SymbolTable::new();
+
+    let abc = syms.add("abc");
+    let def = syms.add("def");
+
+    w.add_fact(fact("x", &[&abc, &int(0), &string("test")]));
+    w.add_fact(fact("x", &[&def, &int(2), &string("hello")]));
+
+    let res = w.query_rule(constrained_rule("int_set",
+      &[var("sym"), var("str")],
+      &[
+        pred("x", &[var("sym"), ID::Variable(0), var("str")]),
+      ],
+      &[
+        Constraint {
+          id: 0,
+          kind: ConstraintKind::Int(IntConstraint::In([0, 1].iter().cloned().collect()))
+        }
+      ]
+    ));
+    for fact in &res {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("int_set", &[&abc, &string("test")]),
+    ]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+
+    let abc_sym_id = syms.insert("abc");
+    let ghi_sym_id = syms.insert("ghi");
+
+    let res = w.query_rule(constrained_rule("symbol_set",
+      &[ID::Variable(0), var("int"), var("str")],
+      &[
+        pred("x", &[ID::Variable(0), var("int"), var("str")]),
+      ],
+      &[
+        Constraint {
+          id: 0,
+          kind: ConstraintKind::Symbol(SymbolConstraint::NotIn([abc_sym_id, ghi_sym_id].iter().cloned().collect()))
+        }
+      ]
+    ));
+    for fact in &res {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("symbol_set", &[&def, &int(2), &string("hello")]),
+    ]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+
+    let res = w.query_rule(constrained_rule("string_set",
+      &[var("sym"), var("int"), ID::Variable(0)],
+      &[
+        pred("x", &[var("sym"), var("int"), ID::Variable(0)]),
+      ],
+      &[
+        Constraint {
+          id: 0,
+          kind: ConstraintKind::Str(StrConstraint::In(["test".to_string(), "aaa".to_string()].iter().cloned().collect()))
+        }
+      ]
+    ));
+    for fact in &res {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("string_set", &[&abc, &int(0), &string("test")]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }

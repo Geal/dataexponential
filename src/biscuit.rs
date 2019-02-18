@@ -214,6 +214,7 @@ mod tests {
       fact("resource", &[&ambient, &string("/folder/file1")]),
       fact("operation", &[&ambient, &read]),
       fact("time", &[&ambient, &date(&SystemTime::now())]),
+      fact("source", &[&ambient, &string("192.168.1.3")]),
     ];
     let ambient_rules = vec![];
 
@@ -239,14 +240,18 @@ mod tests {
 
     assert!(!res.is_empty());
 
-    /*set inclusion caveat
-    let res = w.query_rule(constrained_rule("caveat2", &[], &[
-      pred("resource", &[ambient, var("X")]),
-      pred("owner", &[ambient, sym(&mut syms, "geoffroy"), var("X")])
-    ]));
+    // set inclusion caveat
+    let res = w.query_rule(constrained_rule("caveat2", &[ID::Variable(0)],
+      &[
+        pred("source", &[&ambient, &ID::Variable(0)]),
+      ],
+      &[Constraint {
+        id: 0,
+        kind: ConstraintKind::Str(StrConstraint::In(["1.2.3.4".to_string(), "192.168.1.3".to_string()].iter().cloned().collect()))
+      }]
+    ));
 
     assert!(!res.is_empty());
-    */
 
     // string prefix caveat
     let res = w.query_rule(constrained_rule("caveat3", &[ID::Variable(1234)], &[
