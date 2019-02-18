@@ -94,8 +94,11 @@ mod tests {
   use super::*;
   use super::super::*;
 
+  // example queries from https://github.com/CleverCloud/biscuit/issues/11
+
+  /// example 1 from https://github.com/CleverCloud/biscuit/issues/11#issue-406906214
   #[test]
-  fn biscuit() {
+  fn example1_basic() {
     let mut syms = SymbolTable::new();
     let authority = syms.insert("authority");
     let ambient = syms.insert("ambient");
@@ -105,14 +108,14 @@ mod tests {
       fact("right", &[ID::Symbol(authority), sym(&mut syms, "file2"), sym(&mut syms, "read")]),
       fact("right", &[ID::Symbol(authority), sym(&mut syms, "file1"), sym(&mut syms, "write")]),
     ];
-    let authority_rules = Vec::new();
+    let authority_rules = vec![];
     let ambient_facts = vec![
       fact("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")]),
       fact("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
     ];
-    let ambient_rules = Vec::new();
+    let ambient_rules = vec![];
 
-    let mut w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
+    let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
       ambient_facts, ambient_rules);
 
     let res = w.query_rule(rule("caveat1", &[], &[
@@ -127,5 +130,203 @@ mod tests {
     }
 
     assert!(!res.is_empty());
+
+    let res = w.query_rule(rule("caveat2", &[], &[
+      pred("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")])
+    ]));
+    //let res = w.query(pred("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")]));
+
+    println!("caveat 2 results:");
+    for fact in res.iter() {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    assert!(!res.is_empty());
   }
+
+  /// example 2 from https://github.com/CleverCloud/biscuit/issues/11#issuecomment-460751989
+  #[test]
+  fn example2_authority_rules() {
+    let mut syms = SymbolTable::new();
+    let authority = syms.insert("authority");
+    let ambient = syms.insert("ambient");
+
+    let authority_facts = vec![];
+    let authority_rules = vec![
+      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "read")], &[
+        pred("resource", &[ID::Symbol(ambient), var("X")]),
+        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      ]),
+      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "write")], &[
+        pred("resource", &[ID::Symbol(ambient), var("X")]),
+        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      ]),
+    ];
+    let ambient_facts = vec![
+      fact("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")]),
+      fact("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
+      fact("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), sym(&mut syms, "file1")]),
+    ];
+    let ambient_rules = vec![];
+
+    let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
+      ambient_facts, ambient_rules);
+    for fact in w.facts.iter() {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    let res = w.query_rule(rule("caveat1", &[], &[
+      pred("resource", &[ID::Symbol(ambient), var("X")]),
+      pred("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), var("X")])
+    ]));
+
+    println!("caveat 1 results:");
+    for fact in res.iter() {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    assert!(!res.is_empty());
+  }
+
+  /// example 3 from https://github.com/CleverCloud/biscuit/issues/11#issuecomment-460813482
+  #[test]
+  fn example3_constraints() {
+    let mut syms = SymbolTable::new();
+    let authority = syms.insert("authority");
+    let ambient = syms.insert("ambient");
+
+    let authority_facts = vec![
+      fact("right", &[ID::Symbol(authority), string("/folder/file1"), sym(&mut syms, "read")]),
+      fact("right", &[ID::Symbol(authority), string("/folder/file2"), sym(&mut syms, "read")]),
+      fact("right", &[ID::Symbol(authority), string("/folder2/file3"), sym(&mut syms, "read")]),
+    ];
+    let authority_rules = vec![];
+    let ambient_facts = vec![
+      fact("resource", &[ID::Symbol(ambient), sym(&mut syms, "/folder/file1")]),
+      fact("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
+    ];
+    let ambient_rules = vec![];
+
+    let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
+      ambient_facts, ambient_rules);
+    for fact in w.facts.iter() {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    /* time caveat
+    let res = w.query_rule(constrained_rule("caveat1", &[], &[
+      pred("resource", &[ID::Symbol(ambient), var("X")]),
+      pred("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), var("X")])
+    ]));
+
+    assert!(!res.is_empty());
+    */
+
+    /*set inclusion caveat
+    let res = w.query_rule(constrained_rule("caveat2", &[], &[
+      pred("resource", &[ID::Symbol(ambient), var("X")]),
+      pred("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), var("X")])
+    ]));
+
+    assert!(!res.is_empty());
+    */
+
+    // string prefix caveat
+    let res = w.query_rule(constrained_rule("caveat3", &[], &[
+        pred("resource", &[ID::Symbol(ambient), ID::Variable(1234)]),
+      ],
+      &[Constraint {
+        id: 1234,
+        kind: ConstraintKind::Str(StrConstraint::Prefix("/folder/".to_string()))
+      }]
+    ));
+
+    assert!(!res.is_empty());
+  }
+
+  /*
+  /// example 4 from https://github.com/CleverCloud/biscuit/issues/11#issuecomment-460989277
+  #[test]
+  fn example4_multiple_verifiers() {
+    let mut syms = SymbolTable::new();
+    let authority = syms.insert("authority");
+    let ambient = syms.insert("ambient");
+
+    let authority_facts = vec![
+      fact("organisation", &[ID::Symbol(authority), sym(&mut syms, "myorg")]),
+      fact("owner", &[ID::Symbol(authority), sym(&mut syms, "myorg"), sym(&mut syms, "myapp")]),
+      fact("owner", &[ID::Symbol(authority), sym(&mut syms, "myorg"), sym(&mut syms, "myapp2")]),
+    ];
+    let authority_rules = vec![
+      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "read")], &[
+        pred("resource", &[ID::Symbol(ambient), var("X")]),
+        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      ]),
+      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "write")], &[
+        pred("resource", &[ID::Symbol(ambient), var("X")]),
+        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      ]),
+    ];
+
+    let caveat1 = constrained_rule("caveat1", &[], &[
+        pred("application", &[ID::Symbol(ambient), sym(&mut syms, "myapp")]),
+        pred("operation", &[ID::Symbol(ambient), var("X")]),
+        pred("right", &[ID::Symbol(authority), sym(&mut syms, "myapp"), var("X")]),
+      ],
+      &[FIXME: implement set inclusion
+           Constraint {
+        id: 1234,
+        kind: ConstraintKind::Str(StrConstraint::Prefix("/folder/".to_string()))
+      }]
+    );
+
+    {
+      // Verifier1
+      let ambient_facts1 = vec![
+      ];
+      let ambient_rules1 = vec![];
+
+      let syms1 = syms.clone();
+
+      let w1 = World::biscuit_create(&mut syms1, authority_facts, authority_rules,
+        ambient_facts1, ambient_rules1);
+      for fact in w1.facts.iter() {
+        println!("\t{}", syms1.print_fact(fact));
+      }
+
+      let res = w1.query_rule(caveat1);
+
+      println!("verifier 1, caveat 1 results:");
+      for fact in res.iter() {
+        println!("\t{}", syms1.print_fact(fact));
+      }
+
+      assert!(!res.is_empty());
+    }
+
+    {
+      // Verifier2
+      let ambient_facts2 = vec![
+      ];
+      let ambient_rules2 = vec![];
+
+      let syms2 = syms.clone();
+
+      let w2 = World::biscuit_create(&mut syms2, authority_facts, authority_rules,
+        ambient_facts2, ambient_rules2);
+      for fact in w2.facts.iter() {
+        println!("\t{}", syms2.print_fact(fact));
+      }
+
+      let res = w2.query_rule(caveat1);
+
+      println!("verifier2, caveat 1 results:");
+      for fact in res.iter() {
+        println!("\t{}", syms2.print_fact(fact));
+      }
+
+      assert!(!res.is_empty());
+    }
+  }
+  */
 }

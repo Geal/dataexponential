@@ -404,6 +404,7 @@ impl World {
   }
 }
 
+#[derive(Clone,Debug,PartialEq)]
 pub struct SymbolTable {
   symbols: Vec<String>,
 }
