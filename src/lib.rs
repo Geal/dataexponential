@@ -105,7 +105,7 @@ impl Constraint {
 
     match (id, &self.kind) {
       (ID::Variable(_), _) => panic!("should not check constraint on a variable"),
-      (ID::Symbol(_), _) => true,
+      (ID::Symbol(_), _) => false,
       (ID::Integer(i), ConstraintKind::Int(c)) => match c {
         IntConstraint::Lower(j)  => *i < *j,
         IntConstraint::Larger(j) => *i > *j,

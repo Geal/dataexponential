@@ -212,7 +212,7 @@ mod tests {
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &file1]),
+      fact("resource", &[&ambient, &string("/folder/file1")]),
       fact("operation", &[&ambient, &read]),
     ];
     let ambient_rules = vec![];
