@@ -4,6 +4,7 @@ extern crate test;
 extern crate sha2;
 
 use std::fmt;
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
 use std::convert::AsRef;
 use std::collections::{HashMap,HashSet};
 use sha2::{Sha256, Digest};
@@ -16,6 +17,7 @@ pub enum ID {
   Variable(u32),
   Integer(i64),
   Str(String),
+  Date(u64),
 }
 
 impl From<&ID> for ID {
@@ -25,6 +27,7 @@ impl From<&ID> for ID {
       ID::Variable(ref v) => ID::Variable(*v),
       ID::Integer(ref i) => ID::Integer(*i),
       ID::Str(ref s) => ID::Str(s.clone()),
+      ID::Date(ref d) => ID::Date(*d),
     }
   }
 }
@@ -81,6 +84,7 @@ impl AsRef<Constraint> for Constraint {
 pub enum ConstraintKind {
   Int(IntConstraint),
   Str(StrConstraint),
+  Date(DateConstraint),
 }
 
 #[derive(Debug,Clone,PartialEq)]
@@ -95,6 +99,12 @@ pub enum StrConstraint {
   Prefix(String),
   Suffix(String),
   Equal(String),
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum DateConstraint {
+  Before(u64),
+  After(u64),
 }
 
 impl Constraint {
@@ -116,7 +126,11 @@ impl Constraint {
         StrConstraint::Suffix(suff) => s.as_str().ends_with(suff.as_str()),
         StrConstraint::Equal(s2)    => &s == &s2,
       },
-      _ => true,
+      (ID::Date(d), ConstraintKind::Date(c)) => match c {
+        DateConstraint::Before(b) => d <=b,
+        DateConstraint::After(b) => d >= b,
+      }
+      _ => false,
     }
   }
 }
@@ -329,6 +343,11 @@ pub fn string(s: &str) -> ID {
   ID::Str(s.to_string())
 }
 
+pub fn date(t: &SystemTime) -> ID {
+  let dur = t.duration_since(UNIX_EPOCH).unwrap();
+  ID::Date(dur.as_secs())
+}
+
 /// warning: collision risk
 pub fn var(name: &str) -> ID {
   let mut hasher = Sha256::new();
@@ -455,6 +474,10 @@ impl SymbolTable {
           ID::Integer(i) => i.to_string(),
           ID::Str(s) => s.clone(),
           ID::Symbol(index) => format!("#{}", self.symbols[*index as usize]),
+          ID::Date(d) => {
+            let t = UNIX_EPOCH + Duration::from_secs(*d);
+            format!("{:?}", t)
+          }
         }
       }).collect::<Vec<_>>();
     format!("fact({}, {})", f.0.name, strings.join(", "))
@@ -643,6 +666,79 @@ mod tests {
       fact("route suffix", &[&app_0, &string("example.com")]),
       fact("route suffix", &[&app_0, &string("www.example.com")]),
       fact("route suffix", &[&app_1, &string("mx.example.com")])
+    ]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+  }
+
+  #[test]
+  fn date_constraint() {
+    let mut w = World::new();
+    let mut syms = SymbolTable::new();
+
+    let t1 = SystemTime::now();
+    println!("t1 = {:?}", t1);
+    let t2 = t1 + Duration::from_secs(10);
+    println!("t2 = {:?}", t2);
+    let t3 = t2 + Duration::from_secs(30);
+    println!("t3 = {:?}", t3);
+
+    let t2_timestamp = t2.duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    let abc = syms.add("abc");
+    let def = syms.add("def");
+
+    w.add_fact(fact("x", &[&date(&t1), &abc]));
+    w.add_fact(fact("x", &[&date(&t3), &def]));
+
+    let res = w.query_rule(constrained_rule("before",
+      &[ID::Variable(1234), var("val")],
+      &[
+        pred("x", &[ID::Variable(1234), var("val")]),
+      ],
+      &[
+        Constraint {
+          id: 1234,
+          kind: ConstraintKind::Date(DateConstraint::Before(t2_timestamp))
+        },
+        Constraint {
+          id: 1234,
+          kind: ConstraintKind::Date(DateConstraint::After(0))
+        }
+      ]
+    ));
+    for fact in &res {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("before", &[&date(&t1), &abc]),
+    ]).drain(..).collect::<HashSet<_>>();
+    assert_eq!(res2, compared);
+
+    let res = w.query_rule(constrained_rule("after",
+      &[ID::Variable(1234), var("val")],
+      &[
+        pred("x", &[ID::Variable(1234), var("val")]),
+      ],
+      &[
+        Constraint {
+          id: 1234,
+          kind: ConstraintKind::Date(DateConstraint::After(t2_timestamp))
+        },
+        Constraint {
+          id: 1234,
+          kind: ConstraintKind::Date(DateConstraint::After(0))
+        }
+      ]
+    ));
+    for fact in &res {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    let res2 = res.iter().cloned().collect::<HashSet<_>>();
+    let compared = (vec![
+      fact("after", &[&date(&t3), &def]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }

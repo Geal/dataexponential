@@ -202,7 +202,6 @@ mod tests {
     let mut syms = SymbolTable::new();
     let authority = syms.add("authority");
     let ambient = syms.add("ambient");
-    let file1 = syms.add("/folder/file1");
     let read = syms.add("read");
 
     let authority_facts = vec![
@@ -214,6 +213,7 @@ mod tests {
     let ambient_facts = vec![
       fact("resource", &[&ambient, &string("/folder/file1")]),
       fact("operation", &[&ambient, &read]),
+      fact("time", &[&ambient, &date(&SystemTime::now())]),
     ];
     let ambient_rules = vec![];
 
@@ -223,14 +223,21 @@ mod tests {
       println!("\t{}", syms.print_fact(fact));
     }
 
-    /* time caveat
-    let res = w.query_rule(constrained_rule("caveat1", &[], &[
-      pred("resource", &[ambient, var("X")]),
-      pred("owner", &[ambient, sym(&mut syms, "geoffroy"), var("X")])
-    ]));
+    // will expire on 2020-02-18 15:56:10GMT+01:00
+    let expiration = 1582041370;
+
+    // time caveat
+    let res = w.query_rule(constrained_rule("caveat1", &[ID::Variable(0)],
+      &[
+        pred("time", &[&ambient, &ID::Variable(0)]),
+      ],
+      &[Constraint {
+        id: 0,
+        kind: ConstraintKind::Date(DateConstraint::Before(expiration))
+      }]
+    ));
 
     assert!(!res.is_empty());
-    */
 
     /*set inclusion caveat
     let res = w.query_rule(constrained_rule("caveat2", &[], &[
