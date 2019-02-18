@@ -100,28 +100,32 @@ mod tests {
   #[test]
   fn example1_basic() {
     let mut syms = SymbolTable::new();
-    let authority = syms.insert("authority");
-    let ambient = syms.insert("ambient");
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
+    let file1 = syms.add("file1");
+    let file2 = syms.add("file2");
+    let read = syms.add("read");
+    let write = syms.add("write");
 
     let authority_facts = vec![
-      fact("right", &[ID::Symbol(authority), sym(&mut syms, "file1"), sym(&mut syms, "read")]),
-      fact("right", &[ID::Symbol(authority), sym(&mut syms, "file2"), sym(&mut syms, "read")]),
-      fact("right", &[ID::Symbol(authority), sym(&mut syms, "file1"), sym(&mut syms, "write")]),
+      fact("right", &[&authority, &file1, &read]),
+      fact("right", &[&authority, &file2, &read]),
+      fact("right", &[&authority, &file1, &write]),
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")]),
-      fact("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
+      fact("resource", &[&ambient, &file1]),
+      fact("operation", &[&ambient, &read]),
     ];
     let ambient_rules = vec![];
 
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
       ambient_facts, ambient_rules);
 
-    let res = w.query_rule(rule("caveat1", &[], &[
-      pred("resource", &[ID::Symbol(ambient), var("X")]),
-      pred("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
-      pred("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "read")])
+    let res = w.query_rule(rule("caveat1", &[var("X")], &[
+      pred("resource", &[&ambient, &var("X")]),
+      pred("operation", &[&ambient, &read]),
+      pred("right", &[&authority, &var("X"), &read])
     ]));
 
     println!("caveat 1 results:");
@@ -131,10 +135,10 @@ mod tests {
 
     assert!(!res.is_empty());
 
-    let res = w.query_rule(rule("caveat2", &[], &[
-      pred("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")])
+    let res = w.query_rule(rule("caveat2", &[&file1], &[
+      pred("resource", &[&ambient, &file1])
     ]));
-    //let res = w.query(pred("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")]));
+    //let res = w.query(pred("resource", &[ambient, sym(&mut syms, "file1")]));
 
     println!("caveat 2 results:");
     for fact in res.iter() {
@@ -148,24 +152,28 @@ mod tests {
   #[test]
   fn example2_authority_rules() {
     let mut syms = SymbolTable::new();
-    let authority = syms.insert("authority");
-    let ambient = syms.insert("ambient");
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
+    let file1 = syms.add("file1");
+    let read = syms.add("read");
+    let write = syms.add("write");
+    let geoffroy = syms.add("geoffroy");
 
     let authority_facts = vec![];
     let authority_rules = vec![
-      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "read")], &[
-        pred("resource", &[ID::Symbol(ambient), var("X")]),
-        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      rule("right", &[&authority, &var("X"), &read], &[
+        pred("resource", &[&ambient, &var("X")]),
+        pred("owner", &[&ambient, &var("Y"), &var("X")])
       ]),
-      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "write")], &[
-        pred("resource", &[ID::Symbol(ambient), var("X")]),
-        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      rule("right", &[&authority, &var("X"), &write], &[
+        pred("resource", &[&ambient, &var("X")]),
+        pred("owner", &[&ambient, &var("Y"), &var("X")])
       ]),
     ];
     let ambient_facts = vec![
-      fact("resource", &[ID::Symbol(ambient), sym(&mut syms, "file1")]),
-      fact("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
-      fact("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), sym(&mut syms, "file1")]),
+      fact("resource", &[&ambient, &file1]),
+      fact("operation", &[&ambient, &read]),
+      fact("owner", &[&ambient, &geoffroy,&file1]),
     ];
     let ambient_rules = vec![];
 
@@ -175,9 +183,9 @@ mod tests {
       println!("\t{}", syms.print_fact(fact));
     }
 
-    let res = w.query_rule(rule("caveat1", &[], &[
-      pred("resource", &[ID::Symbol(ambient), var("X")]),
-      pred("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), var("X")])
+    let res = w.query_rule(rule("caveat1", &[var("X")], &[
+      pred("resource", &[&ambient, &var("X")]),
+      pred("owner", &[&ambient, &geoffroy, &var("X")])
     ]));
 
     println!("caveat 1 results:");
@@ -192,18 +200,20 @@ mod tests {
   #[test]
   fn example3_constraints() {
     let mut syms = SymbolTable::new();
-    let authority = syms.insert("authority");
-    let ambient = syms.insert("ambient");
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
+    let file1 = syms.add("/folder/file1");
+    let read = syms.add("read");
 
     let authority_facts = vec![
-      fact("right", &[ID::Symbol(authority), string("/folder/file1"), sym(&mut syms, "read")]),
-      fact("right", &[ID::Symbol(authority), string("/folder/file2"), sym(&mut syms, "read")]),
-      fact("right", &[ID::Symbol(authority), string("/folder2/file3"), sym(&mut syms, "read")]),
+      fact("right", &[&authority, &string("/folder/file1"), &read]),
+      fact("right", &[&authority, &string("/folder/file2"), &read]),
+      fact("right", &[&authority, &string("/folder2/file3"), &read]),
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[ID::Symbol(ambient), sym(&mut syms, "/folder/file1")]),
-      fact("operation", &[ID::Symbol(ambient), sym(&mut syms, "read")]),
+      fact("resource", &[&ambient, &file1]),
+      fact("operation", &[&ambient, &read]),
     ];
     let ambient_rules = vec![];
 
@@ -215,8 +225,8 @@ mod tests {
 
     /* time caveat
     let res = w.query_rule(constrained_rule("caveat1", &[], &[
-      pred("resource", &[ID::Symbol(ambient), var("X")]),
-      pred("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), var("X")])
+      pred("resource", &[ambient, var("X")]),
+      pred("owner", &[ambient, sym(&mut syms, "geoffroy"), var("X")])
     ]));
 
     assert!(!res.is_empty());
@@ -224,16 +234,16 @@ mod tests {
 
     /*set inclusion caveat
     let res = w.query_rule(constrained_rule("caveat2", &[], &[
-      pred("resource", &[ID::Symbol(ambient), var("X")]),
-      pred("owner", &[ID::Symbol(ambient), sym(&mut syms, "geoffroy"), var("X")])
+      pred("resource", &[ambient, var("X")]),
+      pred("owner", &[ambient, sym(&mut syms, "geoffroy"), var("X")])
     ]));
 
     assert!(!res.is_empty());
     */
 
     // string prefix caveat
-    let res = w.query_rule(constrained_rule("caveat3", &[], &[
-        pred("resource", &[ID::Symbol(ambient), ID::Variable(1234)]),
+    let res = w.query_rule(constrained_rule("caveat3", &[ID::Variable(1234)], &[
+        pred("resource", &[ambient, ID::Variable(1234)]),
       ],
       &[Constraint {
         id: 1234,
@@ -249,29 +259,29 @@ mod tests {
   #[test]
   fn example4_multiple_verifiers() {
     let mut syms = SymbolTable::new();
-    let authority = syms.insert("authority");
-    let ambient = syms.insert("ambient");
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
 
     let authority_facts = vec![
-      fact("organisation", &[ID::Symbol(authority), sym(&mut syms, "myorg")]),
-      fact("owner", &[ID::Symbol(authority), sym(&mut syms, "myorg"), sym(&mut syms, "myapp")]),
-      fact("owner", &[ID::Symbol(authority), sym(&mut syms, "myorg"), sym(&mut syms, "myapp2")]),
+      fact("organisation", &[authority, sym(&mut syms, "myorg")]),
+      fact("owner", &[authority, sym(&mut syms, "myorg"), sym(&mut syms, "myapp")]),
+      fact("owner", &[authority, sym(&mut syms, "myorg"), sym(&mut syms, "myapp2")]),
     ];
     let authority_rules = vec![
-      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "read")], &[
-        pred("resource", &[ID::Symbol(ambient), var("X")]),
-        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      rule("right", &[authority, var("X"), sym(&mut syms, "read")], &[
+        pred("resource", &[ambient, var("X")]),
+        pred("owner", &[ambient, var("Y"), var("X")])
       ]),
-      rule("right", &[ID::Symbol(authority), var("X"), sym(&mut syms, "write")], &[
-        pred("resource", &[ID::Symbol(ambient), var("X")]),
-        pred("owner", &[ID::Symbol(ambient), var("Y"), var("X")])
+      rule("right", &[authority, var("X"), sym(&mut syms, "write")], &[
+        pred("resource", &[ambient, var("X")]),
+        pred("owner", &[ambient, var("Y"), var("X")])
       ]),
     ];
 
     let caveat1 = constrained_rule("caveat1", &[], &[
-        pred("application", &[ID::Symbol(ambient), sym(&mut syms, "myapp")]),
-        pred("operation", &[ID::Symbol(ambient), var("X")]),
-        pred("right", &[ID::Symbol(authority), sym(&mut syms, "myapp"), var("X")]),
+        pred("application", &[ambient, sym(&mut syms, "myapp")]),
+        pred("operation", &[ambient, var("X")]),
+        pred("right", &[authority, sym(&mut syms, "myapp"), var("X")]),
       ],
       &[FIXME: implement set inclusion
            Constraint {
