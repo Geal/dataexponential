@@ -3,7 +3,7 @@ use super::*;
 impl World {
   pub fn biscuit_create(table: &mut SymbolTable,
     mut authority_facts: Vec<Fact>, mut authority_rules: Vec<Rule>,
-    mut ambient_facts: Vec<Fact>, mut ambient_rules: Vec<Rule>) -> World {
+    mut ambient_facts: Vec<Fact>, ambient_rules: Vec<Rule>) -> World {
     let mut w = World::new();
     let authority_index = table.insert("authority");
     let ambient_index = table.insert("ambient");
@@ -278,8 +278,6 @@ mod tests {
     let myorg = syms.add("myorg");
     let myapp = syms.add("myapp");
     let myapp2 = syms.add("myapp2");
-    let read = syms.add("read");
-    let write = syms.add("write");
     let deploy = syms.add("deploy");
     let undeploy = syms.add("undeploy");
     let read_id = syms.insert("read");
