@@ -489,9 +489,13 @@ impl SymbolTable {
   }
 
   pub fn print_fact(&self, f: &Fact) -> String {
-    let strings = f.0.ids.iter().map(|id| {
+    format!("{}", self.print_predicate(&f.0))
+  }
+
+  pub fn print_predicate(&self, p: &Predicate) -> String {
+    let strings = p.ids.iter().map(|id| {
         match id {
-          ID::Variable(_) => panic!("a fact should not contain a variable"),
+          ID::Variable(i) => format!("{}?", i),
           ID::Integer(i) => i.to_string(),
           ID::Str(s) => s.clone(),
           ID::Symbol(index) => format!("#{}", self.symbols[*index as usize]),
@@ -501,7 +505,34 @@ impl SymbolTable {
           }
         }
       }).collect::<Vec<_>>();
-    format!("fact({}, {})", f.0.name, strings.join(", "))
+    format!("{}({})", self.symbols[p.name as usize], strings.join(", "))
+  }
+
+  pub fn print_constraint(&self, c: &Constraint) -> String {
+    match &c.kind {
+      ConstraintKind::Int(IntConstraint::Lower(i)) => format!("{}? < {}", c.id, i),
+      ConstraintKind::Int(IntConstraint::Larger(i)) => format!("{}? > {}", c.id, i),
+      ConstraintKind::Int(IntConstraint::Equal(i)) => format!("{}? == {}", c.id, i),
+      ConstraintKind::Int(IntConstraint::In(i)) => format!("{}? in {:?}", c.id, i),
+      ConstraintKind::Int(IntConstraint::NotIn(i)) => format!("{}? not in {:?}", c.id, i),
+      ConstraintKind::Str(StrConstraint::Prefix(i)) => format!("{}? matches {}*", c.id, i),
+      ConstraintKind::Str(StrConstraint::Suffix(i)) => format!("{}? matches *{}", c.id, i),
+      ConstraintKind::Str(StrConstraint::Equal(i)) => format!("{}? == {}", c.id, i),
+      ConstraintKind::Str(StrConstraint::In(i)) => format!("{}? in {:?}", c.id, i),
+      ConstraintKind::Str(StrConstraint::NotIn(i)) => format!("{}? not in {:?}", c.id, i),
+      ConstraintKind::Date(DateConstraint::Before(i)) => format!("{}? <= {:?}", c.id, i),
+      ConstraintKind::Date(DateConstraint::After(i)) => format!("{}? >= {:?}", c.id, i),
+      ConstraintKind::Symbol(SymbolConstraint::In(i)) => format!("{}? in {:?}", c.id, i),
+      ConstraintKind::Symbol(SymbolConstraint::NotIn(i)) => format!("{}? not in {:?}", c.id, i),
+    }
+  }
+
+  pub fn print_rule(&self, r: &Rule) -> String {
+    let res = self.print_predicate(&r.0);
+    let preds:Vec<_> = r.1.iter().map(|p| self.print_predicate(p)).collect();
+    let constraints: Vec<_> = r.2.iter().map(|c| self.print_constraint(c)).collect();
+
+    format!("{} <- {} | {}", res, preds.join(" && "), constraints.join(" && "))
   }
 }
 
@@ -532,17 +563,23 @@ mod tests {
     w.add_fact(fact(parent, &[&b, &c]));
     w.add_fact(fact(parent, &[&c, &d]));
 
-    let query_rule_result = w.query_rule(rule(grandparent, &[var("grandparent"), var("grandchild")], &[
+    let r1 = rule(grandparent, &[var("grandparent"), var("grandchild")], &[
       pred(parent, &[var("grandparent"), var("parent")]),
       pred(parent, &[var("parent"), var("grandchild")])
-    ]));
+    ]);
+
+    println!("testing r1: {}", syms.print_rule(&r1));
+    let query_rule_result = w.query_rule(r1);
     println!("grandparents query_rules: {:?}", query_rule_result);
     println!("current facts: {:?}", w.facts);
 
-    w.add_rule(rule(grandparent, &[var("grandparent"), var("grandchild")], &[
+    let r2 = rule(grandparent, &[var("grandparent"), var("grandchild")], &[
       pred(parent, &[var("grandparent"), var("parent")]),
       pred(parent, &[var("parent"), var("grandchild")])
-    ]));
+    ]);
+
+    println!("adding r2: {}", syms.print_rule(&r2));
+    w.add_rule(r2);
 
     w.run();
 
@@ -721,7 +758,7 @@ mod tests {
     w.add_fact(fact(x, &[&date(&t1), &abc]));
     w.add_fact(fact(x, &[&date(&t3), &def]));
 
-    let res = w.query_rule(constrained_rule(before,
+    let r1 = constrained_rule(before,
       &[ID::Variable(1234), var("val")],
       &[
         pred(x, &[ID::Variable(1234), var("val")]),
@@ -736,7 +773,10 @@ mod tests {
           kind: ConstraintKind::Date(DateConstraint::After(0))
         }
       ]
-    ));
+    );
+
+    println!("testing r1: {}", syms.print_rule(&r1));
+    let res = w.query_rule(r1);
     for fact in &res {
       println!("\t{}", syms.print_fact(fact));
     }
@@ -747,7 +787,7 @@ mod tests {
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
-    let res = w.query_rule(constrained_rule(after,
+    let r2 = constrained_rule(after,
       &[ID::Variable(1234), var("val")],
       &[
         pred(x, &[ID::Variable(1234), var("val")]),
@@ -762,7 +802,10 @@ mod tests {
           kind: ConstraintKind::Date(DateConstraint::After(0))
         }
       ]
-    ));
+    );
+
+    println!("testing r2: {}", syms.print_rule(&r2));
+    let res = w.query_rule(r2);
     for fact in &res {
       println!("\t{}", syms.print_fact(fact));
     }

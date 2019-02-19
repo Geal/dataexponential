@@ -127,14 +127,30 @@ mod tests {
     ];
     let ambient_rules = vec![];
 
+    for fact in authority_facts.iter() {
+      println!("{}", syms.print_fact(&fact));
+    }
+    for rule in authority_rules.iter() {
+      println!("{}", syms.print_rule(&rule));
+    }
+    for fact in ambient_facts.iter() {
+      println!("{}", syms.print_fact(&fact));
+    }
+    for rule in ambient_rules.iter() {
+      println!("{}", syms.print_rule(&rule));
+    }
+
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
     ambient_facts, ambient_rules);
 
-    let res = w.query_rule(rule(caveat1, &[var("X")], &[
+    let r1 = rule(caveat1, &[var("X")], &[
                                 pred(resource, &[&ambient, &var("X")]),
                                 pred(operation, &[&ambient, &read]),
                                 pred(right, &[&authority, &var("X"), &read])
-    ]));
+    ]);
+
+    println!("caveat 1: {}", syms.print_rule(&r1));
+    let res = w.query_rule(r1);
 
     println!("caveat 1 results:");
     for fact in res.iter() {
@@ -143,10 +159,13 @@ mod tests {
 
     assert!(!res.is_empty());
 
-    let res = w.query_rule(rule(caveat2, &[&file1], &[
+    let r2 = rule(caveat2, &[&file1], &[
                                 pred(resource, &[&ambient, &file1])
-    ]));
+    ]);
     //let res = w.query(pred(resource, &[ambient, sym(&mut syms, "file1")]));
+    //
+    println!("caveat 2: {}", syms.print_rule(&r2));
+    let res = w.query_rule(r2);
 
     println!("caveat 2 results:");
     for fact in res.iter() {
@@ -189,6 +208,19 @@ mod tests {
       fact(owner, &[&ambient, &geoffroy,&file1]),
     ];
     let ambient_rules = vec![];
+
+    for fact in authority_facts.iter() {
+      println!("{}", syms.print_fact(&fact));
+    }
+    for rule in authority_rules.iter() {
+      println!("{}", syms.print_rule(&rule));
+    }
+    for fact in ambient_facts.iter() {
+      println!("{}", syms.print_fact(&fact));
+    }
+    for rule in ambient_rules.iter() {
+      println!("{}", syms.print_rule(&rule));
+    }
 
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
     ambient_facts, ambient_rules);
@@ -239,17 +271,27 @@ mod tests {
     ];
     let ambient_rules = vec![];
 
+    for fact in authority_facts.iter() {
+      println!("{}", syms.print_fact(&fact));
+    }
+    for rule in authority_rules.iter() {
+      println!("{}", syms.print_rule(&rule));
+    }
+    for fact in ambient_facts.iter() {
+      println!("{}", syms.print_fact(&fact));
+    }
+    for rule in ambient_rules.iter() {
+      println!("{}", syms.print_rule(&rule));
+    }
+
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
     ambient_facts, ambient_rules);
-    for fact in w.facts.iter() {
-      println!("\t{}", syms.print_fact(fact));
-    }
 
     // will expire on 2020-02-18 15:56:10GMT+01:00
     let expiration = 1582041370;
 
     // time caveat
-    let res = w.query_rule(constrained_rule(caveat1, &[ID::Variable(0)],
+    let r1 = constrained_rule(caveat1, &[ID::Variable(0)],
     &[
     pred(time, &[&ambient, &ID::Variable(0)]),
     ],
@@ -257,12 +299,15 @@ mod tests {
       id: 0,
       kind: ConstraintKind::Date(DateConstraint::Before(expiration))
     }]
-    ));
+    );
+
+    println!("caveat 1: {}", syms.print_rule(&r1));
+    let res = w.query_rule(r1);
 
     assert!(!res.is_empty());
 
     // set inclusion caveat
-    let res = w.query_rule(constrained_rule(caveat2, &[ID::Variable(0)],
+    let r2 = constrained_rule(caveat2, &[ID::Variable(0)],
     &[
     pred(source, &[&ambient, &ID::Variable(0)]),
       ],
@@ -270,19 +315,25 @@ mod tests {
         id: 0,
         kind: ConstraintKind::Str(StrConstraint::In(["1.2.3.4".to_string(), "192.168.1.3".to_string()].iter().cloned().collect()))
       }]
-    ));
+    );
+
+    println!("caveat 2: {}", syms.print_rule(&r2));
+    let res = w.query_rule(r2);
 
     assert!(!res.is_empty());
 
     // string prefix caveat
-    let res = w.query_rule(constrained_rule(caveat3, &[ID::Variable(1234)], &[
+    let r3 = constrained_rule(caveat3, &[ID::Variable(1234)], &[
         pred(resource, &[ambient, ID::Variable(1234)]),
       ],
       &[Constraint {
         id: 1234,
         kind: ConstraintKind::Str(StrConstraint::Prefix("/folder/".to_string()))
       }]
-    ));
+    );
+
+    println!("caveat 3: {}", syms.print_rule(&r3));
+    let res = w.query_rule(r3);
 
     assert!(!res.is_empty());
   }
