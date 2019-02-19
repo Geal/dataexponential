@@ -175,6 +175,44 @@ mod tests {
     assert!(!res.is_empty());
   }
 
+  #[test]
+  fn revocation_id() {
+    let mut syms = SymbolTable::new();
+    let revocation_id = syms.insert("revocation_id");
+    let valid_revocation_id = syms.insert("valid_revocation_id");
+
+    let authority_facts = vec![];
+    let authority_rules = vec![];
+    let ambient_facts = vec![];
+    let ambient_rules = vec![];
+
+
+    let mut w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
+    ambient_facts, ambient_rules);
+
+    let block_fact = fact(revocation_id, &[int(42)]);
+    w.add_fact(block_fact);
+    w.run();
+    for fact in w.facts.iter() {
+      println!("- {}", syms.print_fact(&fact));
+    }
+
+    let ambient_query = constrained_rule(valid_revocation_id, &[ID::Variable(42)],
+      &[pred(revocation_id, &[&ID::Variable(42)])],
+      &[Constraint { id: 42, kind: ConstraintKind::Int(IntConstraint::NotIn([0, 5, 12, 2000].iter().cloned().collect())) }]
+    );
+
+    println!("ambient query (revocation id): {}", syms.print_rule(&ambient_query));
+    let res = w.query_rule(ambient_query);
+
+    println!("ambient query results:");
+    for fact in res.iter() {
+      println!("\t{}", syms.print_fact(fact));
+    }
+
+    assert!(!res.is_empty());
+  }
+
   /// example 2 from https://github.com/CleverCloud/biscuit/issues/11#issuecomment-460751989
   #[test]
   fn example2_authority_rules() {
