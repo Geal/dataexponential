@@ -366,3 +366,165 @@ mod tests {
     }
   }
 }
+
+#[cfg(test)]
+mod bench {
+  use super::*;
+  use test::Bencher;
+
+  #[bench]
+  fn example1_basic(bench: &mut Bencher) {
+    let mut syms = SymbolTable::new();
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
+    let file1 = syms.add("file1");
+    let file2 = syms.add("file2");
+    let read = syms.add("read");
+    let write = syms.add("write");
+
+    let authority_facts = vec![
+      fact("right", &[&authority, &file1, &read]),
+      fact("right", &[&authority, &file2, &read]),
+      fact("right", &[&authority, &file1, &write]),
+    ];
+    let authority_rules = vec![];
+    let ambient_facts = vec![
+      fact("resource", &[&ambient, &file1]),
+      fact("operation", &[&ambient, &read]),
+    ];
+    let ambient_rules = vec![];
+
+    bench.iter(|| {
+      let w = World::biscuit_create(&mut syms, authority_facts.clone(), authority_rules.clone(),
+        ambient_facts.clone(), ambient_rules.clone());
+
+      let res = w.query_rule(rule("caveat1", &[var("X")], &[
+        pred("resource", &[&ambient, &var("X")]),
+        pred("operation", &[&ambient, &read]),
+        pred("right", &[&authority, &var("X"), &read])
+      ]));
+
+      assert!(!res.is_empty());
+
+      let res = w.query_rule(rule("caveat2", &[&file1], &[
+        pred("resource", &[&ambient, &file1])
+      ]));
+
+      assert!(!res.is_empty());
+    });
+  }
+
+  #[bench]
+  fn example2_authority_rules(bench: &mut Bencher) {
+    let mut syms = SymbolTable::new();
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
+    let file1 = syms.add("file1");
+    let read = syms.add("read");
+    let write = syms.add("write");
+    let geoffroy = syms.add("geoffroy");
+
+    let authority_facts = vec![];
+    let authority_rules = vec![
+      rule("right", &[&authority, &var("X"), &read], &[
+        pred("resource", &[&ambient, &var("X")]),
+        pred("owner", &[&ambient, &var("Y"), &var("X")])
+      ]),
+      rule("right", &[&authority, &var("X"), &write], &[
+        pred("resource", &[&ambient, &var("X")]),
+        pred("owner", &[&ambient, &var("Y"), &var("X")])
+      ]),
+    ];
+    let ambient_facts = vec![
+      fact("resource", &[&ambient, &file1]),
+      fact("operation", &[&ambient, &read]),
+      fact("owner", &[&ambient, &geoffroy,&file1]),
+    ];
+    let ambient_rules = vec![];
+
+
+    bench.iter(|| {
+      let w = World::biscuit_create(&mut syms, authority_facts.clone(), authority_rules.clone(),
+        ambient_facts.clone(), ambient_rules.clone());
+
+      let res = w.query_rule(rule("caveat1", &[var("X")], &[
+        pred("resource", &[&ambient, &var("X")]),
+        pred("owner", &[&ambient, &geoffroy, &var("X")])
+      ]));
+
+
+      !res.is_empty()
+    });
+  }
+
+  #[bench]
+  fn example3_constraints(bench: &mut Bencher) {
+    let mut syms = SymbolTable::new();
+    let authority = syms.add("authority");
+    let ambient = syms.add("ambient");
+    let read = syms.add("read");
+
+    let authority_facts = vec![
+      fact("right", &[&authority, &string("/folder/file1"), &read]),
+      fact("right", &[&authority, &string("/folder/file2"), &read]),
+      fact("right", &[&authority, &string("/folder2/file3"), &read]),
+    ];
+    let authority_rules = vec![];
+    let ambient_facts = vec![
+      fact("resource", &[&ambient, &string("/folder/file1")]),
+      fact("operation", &[&ambient, &read]),
+      fact("time", &[&ambient, &date(&SystemTime::now())]),
+      fact("source", &[&ambient, &string("192.168.1.3")]),
+    ];
+    let ambient_rules = vec![];
+
+    bench.iter(move || {
+      let w = World::biscuit_create(&mut syms, authority_facts.clone(), authority_rules.clone(),
+        ambient_facts.clone(), ambient_rules.clone());
+      for fact in w.facts.iter() {
+        println!("\t{}", syms.print_fact(fact));
+      }
+
+      // will expire on 2020-02-18 15:56:10GMT+01:00
+      let expiration = 1582041370;
+
+      // time caveat
+      let res = w.query_rule(constrained_rule("caveat1", &[ID::Variable(0)],
+        &[
+          pred("time", &[&ambient, &ID::Variable(0)]),
+        ],
+        &[Constraint {
+          id: 0,
+          kind: ConstraintKind::Date(DateConstraint::Before(expiration))
+        }]
+      ));
+
+      assert!(!res.is_empty());
+
+      // set inclusion caveat
+      let res = w.query_rule(constrained_rule("caveat2", &[ID::Variable(0)],
+        &[
+          pred("source", &[&ambient, &ID::Variable(0)]),
+        ],
+        &[Constraint {
+          id: 0,
+          kind: ConstraintKind::Str(StrConstraint::In(["1.2.3.4".to_string(), "192.168.1.3".to_string()].iter().cloned().collect()))
+        }]
+      ));
+
+      assert!(!res.is_empty());
+
+      // string prefix caveat
+      let res = w.query_rule(constrained_rule("caveat3", &[ID::Variable(1234)], &[
+          pred("resource", &[&ambient, &ID::Variable(1234)]),
+        ],
+        &[Constraint {
+          id: 1234,
+          kind: ConstraintKind::Str(StrConstraint::Prefix("/folder/".to_string()))
+        }]
+      ));
+
+      assert!(!res.is_empty());
+    });
+  }
+}
