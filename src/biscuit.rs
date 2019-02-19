@@ -109,26 +109,31 @@ mod tests {
     let file2 = syms.add("file2");
     let read = syms.add("read");
     let write = syms.add("write");
+    let right = syms.insert("right");
+    let resource = syms.insert("resource");
+    let operation = syms.insert("operation");
+    let caveat1 = syms.insert("caveat1");
+    let caveat2 = syms.insert("caveat2");
 
     let authority_facts = vec![
-      fact("right", &[&authority, &file1, &read]),
-      fact("right", &[&authority, &file2, &read]),
-      fact("right", &[&authority, &file1, &write]),
+      fact(right, &[&authority, &file1, &read]),
+      fact(right, &[&authority, &file2, &read]),
+      fact(right, &[&authority, &file1, &write]),
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &file1]),
-      fact("operation", &[&ambient, &read]),
+      fact(resource, &[&ambient, &file1]),
+      fact(operation, &[&ambient, &read]),
     ];
     let ambient_rules = vec![];
 
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
-      ambient_facts, ambient_rules);
+    ambient_facts, ambient_rules);
 
-    let res = w.query_rule(rule("caveat1", &[var("X")], &[
-      pred("resource", &[&ambient, &var("X")]),
-      pred("operation", &[&ambient, &read]),
-      pred("right", &[&authority, &var("X"), &read])
+    let res = w.query_rule(rule(caveat1, &[var("X")], &[
+                                pred(resource, &[&ambient, &var("X")]),
+                                pred(operation, &[&ambient, &read]),
+                                pred(right, &[&authority, &var("X"), &read])
     ]));
 
     println!("caveat 1 results:");
@@ -138,10 +143,10 @@ mod tests {
 
     assert!(!res.is_empty());
 
-    let res = w.query_rule(rule("caveat2", &[&file1], &[
-      pred("resource", &[&ambient, &file1])
+    let res = w.query_rule(rule(caveat2, &[&file1], &[
+                                pred(resource, &[&ambient, &file1])
     ]));
-    //let res = w.query(pred("resource", &[ambient, sym(&mut syms, "file1")]));
+    //let res = w.query(pred(resource, &[ambient, sym(&mut syms, "file1")]));
 
     println!("caveat 2 results:");
     for fact in res.iter() {
@@ -161,34 +166,39 @@ mod tests {
     let read = syms.add("read");
     let write = syms.add("write");
     let geoffroy = syms.add("geoffroy");
+    let right = syms.insert("right");
+    let resource = syms.insert("resource");
+    let operation = syms.insert("operation");
+    let owner = syms.insert("owner");
+    let caveat1 = syms.insert("caveat1");
 
     let authority_facts = vec![];
     let authority_rules = vec![
-      rule("right", &[&authority, &var("X"), &read], &[
-        pred("resource", &[&ambient, &var("X")]),
-        pred("owner", &[&ambient, &var("Y"), &var("X")])
+      rule(right, &[&authority, &var("X"), &read], &[
+           pred(resource, &[&ambient, &var("X")]),
+           pred(owner, &[&ambient, &var("Y"), &var("X")])
       ]),
-      rule("right", &[&authority, &var("X"), &write], &[
-        pred("resource", &[&ambient, &var("X")]),
-        pred("owner", &[&ambient, &var("Y"), &var("X")])
+      rule(right, &[&authority, &var("X"), &write], &[
+           pred(resource, &[&ambient, &var("X")]),
+           pred(owner, &[&ambient, &var("Y"), &var("X")])
       ]),
     ];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &file1]),
-      fact("operation", &[&ambient, &read]),
-      fact("owner", &[&ambient, &geoffroy,&file1]),
+      fact(resource, &[&ambient, &file1]),
+      fact(operation, &[&ambient, &read]),
+      fact(owner, &[&ambient, &geoffroy,&file1]),
     ];
     let ambient_rules = vec![];
 
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
-      ambient_facts, ambient_rules);
+    ambient_facts, ambient_rules);
     for fact in w.facts.iter() {
       println!("\t{}", syms.print_fact(fact));
     }
 
-    let res = w.query_rule(rule("caveat1", &[var("X")], &[
-      pred("resource", &[&ambient, &var("X")]),
-      pred("owner", &[&ambient, &geoffroy, &var("X")])
+    let res = w.query_rule(rule(caveat1, &[var("X")], &[
+                                pred(resource, &[&ambient, &var("X")]),
+                                pred(owner, &[&ambient, &geoffroy, &var("X")])
     ]));
 
     println!("caveat 1 results:");
@@ -206,23 +216,31 @@ mod tests {
     let authority = syms.add("authority");
     let ambient = syms.add("ambient");
     let read = syms.add("read");
+    let right = syms.insert("right");
+    let resource = syms.insert("resource");
+    let operation = syms.insert("operation");
+    let time = syms.insert("time");
+    let source = syms.insert("source");
+    let caveat1 = syms.insert("caveat1");
+    let caveat2 = syms.insert("caveat2");
+    let caveat3 = syms.insert("caveat3");
 
     let authority_facts = vec![
-      fact("right", &[&authority, &string("/folder/file1"), &read]),
-      fact("right", &[&authority, &string("/folder/file2"), &read]),
-      fact("right", &[&authority, &string("/folder2/file3"), &read]),
+      fact(right, &[&authority, &string("/folder/file1"), &read]),
+      fact(right, &[&authority, &string("/folder/file2"), &read]),
+      fact(right, &[&authority, &string("/folder2/file3"), &read]),
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &string("/folder/file1")]),
-      fact("operation", &[&ambient, &read]),
-      fact("time", &[&ambient, &date(&SystemTime::now())]),
-      fact("source", &[&ambient, &string("192.168.1.3")]),
+      fact(resource, &[&ambient, &string("/folder/file1")]),
+      fact(operation, &[&ambient, &read]),
+      fact(time, &[&ambient, &date(&SystemTime::now())]),
+      fact(source, &[&ambient, &string("192.168.1.3")]),
     ];
     let ambient_rules = vec![];
 
     let w = World::biscuit_create(&mut syms, authority_facts, authority_rules,
-      ambient_facts, ambient_rules);
+    ambient_facts, ambient_rules);
     for fact in w.facts.iter() {
       println!("\t{}", syms.print_fact(fact));
     }
@@ -231,22 +249,22 @@ mod tests {
     let expiration = 1582041370;
 
     // time caveat
-    let res = w.query_rule(constrained_rule("caveat1", &[ID::Variable(0)],
-      &[
-        pred("time", &[&ambient, &ID::Variable(0)]),
-      ],
-      &[Constraint {
-        id: 0,
-        kind: ConstraintKind::Date(DateConstraint::Before(expiration))
-      }]
+    let res = w.query_rule(constrained_rule(caveat1, &[ID::Variable(0)],
+    &[
+    pred(time, &[&ambient, &ID::Variable(0)]),
+    ],
+    &[Constraint {
+      id: 0,
+      kind: ConstraintKind::Date(DateConstraint::Before(expiration))
+    }]
     ));
 
     assert!(!res.is_empty());
 
     // set inclusion caveat
-    let res = w.query_rule(constrained_rule("caveat2", &[ID::Variable(0)],
-      &[
-        pred("source", &[&ambient, &ID::Variable(0)]),
+    let res = w.query_rule(constrained_rule(caveat2, &[ID::Variable(0)],
+    &[
+    pred(source, &[&ambient, &ID::Variable(0)]),
       ],
       &[Constraint {
         id: 0,
@@ -257,8 +275,8 @@ mod tests {
     assert!(!res.is_empty());
 
     // string prefix caveat
-    let res = w.query_rule(constrained_rule("caveat3", &[ID::Variable(1234)], &[
-        pred("resource", &[ambient, ID::Variable(1234)]),
+    let res = w.query_rule(constrained_rule(caveat3, &[ID::Variable(1234)], &[
+        pred(resource, &[ambient, ID::Variable(1234)]),
       ],
       &[Constraint {
         id: 1234,
@@ -283,20 +301,25 @@ mod tests {
     let read_id = syms.insert("read");
     let write_id = syms.insert("write");
     let deploy_id = syms.insert("deploy");
-
+    let right = syms.insert("right");
+    let operation = syms.insert("operation");
+    let organisation = syms.insert("organisation");
+    let application = syms.insert("application");
+    let owner = syms.insert("owner");
+    let caveat1 = syms.insert("caveat1");
 
     let authority_facts = vec![
-      fact("organisation", &[&authority, &myorg]),
-      fact("owner", &[&authority, &myorg, &myapp]),
-      fact("owner", &[&authority, &myorg, &myapp2]),
+      fact(organisation, &[&authority, &myorg]),
+      fact(owner, &[&authority, &myorg, &myapp]),
+      fact(owner, &[&authority, &myorg, &myapp2]),
     ];
     let authority_rules = vec![
-      // this rule will generate a "right" fact only if there's the correct combination of
+      // this rule will generate a right fact only if there's the correct combination of
       // authority and ambient facts
-      constrained_rule("right", &[&authority, &var("X"), &ID::Variable(0)], &[
-        pred("application", &[&ambient, &var("X")]),
-        pred("owner", &[&authority, &myorg, &var("X")]),
-        pred("operation", &[&ambient, &ID::Variable(0)]),
+      constrained_rule(right, &[&authority, &var("X"), &ID::Variable(0)], &[
+        pred(application, &[&ambient, &var("X")]),
+        pred(owner, &[&authority, &myorg, &var("X")]),
+        pred(operation, &[&ambient, &ID::Variable(0)]),
       ],
       &[
         Constraint {
@@ -306,18 +329,18 @@ mod tests {
       ]),
     ];
 
-    let caveat1 = rule("caveat1", &[var("X")], &[
-        pred("application", &[&ambient, &myapp]),
-        pred("operation", &[&ambient, &var("X")]),
-        pred("right", &[&authority, &myapp, &var("X")]),
+    let caveat1 = rule(caveat1, &[var("X")], &[
+        pred(application, &[&ambient, &myapp]),
+        pred(operation, &[&ambient, &var("X")]),
+        pred(right, &[&authority, &myapp, &var("X")]),
       ],
     );
 
     {
       // Verifier1
       let ambient_facts1 = vec![
-        fact("application", &[&ambient, &myapp]),
-        fact("operation", &[&ambient, &deploy]),
+        fact(application, &[&ambient, &myapp]),
+        fact(operation, &[&ambient, &deploy]),
       ];
       let ambient_rules1 = vec![];
 
@@ -342,8 +365,8 @@ mod tests {
     {
       // Verifier2
       let ambient_facts2 = vec![
-        fact("application", &[&ambient, &myapp]),
-        fact("operation", &[&ambient, &undeploy]),
+        fact(application, &[&ambient, &myapp]),
+        fact(operation, &[&ambient, &undeploy]),
       ];
       let ambient_rules2 = vec![];
 
@@ -381,16 +404,21 @@ mod bench {
     let file2 = syms.add("file2");
     let read = syms.add("read");
     let write = syms.add("write");
+    let right = syms.insert("right");
+    let resource = syms.insert("resource");
+    let operation = syms.insert("operation");
+    let caveat1 = syms.insert("caveat1");
+    let caveat2 = syms.insert("caveat2");
 
     let authority_facts = vec![
-      fact("right", &[&authority, &file1, &read]),
-      fact("right", &[&authority, &file2, &read]),
-      fact("right", &[&authority, &file1, &write]),
+      fact(right, &[&authority, &file1, &read]),
+      fact(right, &[&authority, &file2, &read]),
+      fact(right, &[&authority, &file1, &write]),
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &file1]),
-      fact("operation", &[&ambient, &read]),
+      fact(resource, &[&ambient, &file1]),
+      fact(operation, &[&ambient, &read]),
     ];
     let ambient_rules = vec![];
 
@@ -398,16 +426,16 @@ mod bench {
       let w = World::biscuit_create(&mut syms, authority_facts.clone(), authority_rules.clone(),
         ambient_facts.clone(), ambient_rules.clone());
 
-      let res = w.query_rule(rule("caveat1", &[var("X")], &[
-        pred("resource", &[&ambient, &var("X")]),
-        pred("operation", &[&ambient, &read]),
-        pred("right", &[&authority, &var("X"), &read])
+      let res = w.query_rule(rule(caveat1, &[var("X")], &[
+        pred(resource, &[&ambient, &var("X")]),
+        pred(operation, &[&ambient, &read]),
+        pred(right, &[&authority, &var("X"), &read])
       ]));
 
       assert!(!res.is_empty());
 
-      let res = w.query_rule(rule("caveat2", &[&file1], &[
-        pred("resource", &[&ambient, &file1])
+      let res = w.query_rule(rule(caveat2, &[&file1], &[
+        pred(resource, &[&ambient, &file1])
       ]));
 
       assert!(!res.is_empty());
@@ -423,22 +451,27 @@ mod bench {
     let read = syms.add("read");
     let write = syms.add("write");
     let geoffroy = syms.add("geoffroy");
+    let right = syms.insert("right");
+    let resource = syms.insert("resource");
+    let operation = syms.insert("operation");
+    let owner = syms.insert("owner");
+    let caveat1 = syms.insert("caveat1");
 
     let authority_facts = vec![];
     let authority_rules = vec![
-      rule("right", &[&authority, &var("X"), &read], &[
-        pred("resource", &[&ambient, &var("X")]),
-        pred("owner", &[&ambient, &var("Y"), &var("X")])
+      rule(right, &[&authority, &var("X"), &read], &[
+        pred(resource, &[&ambient, &var("X")]),
+        pred(owner, &[&ambient, &var("Y"), &var("X")])
       ]),
-      rule("right", &[&authority, &var("X"), &write], &[
-        pred("resource", &[&ambient, &var("X")]),
-        pred("owner", &[&ambient, &var("Y"), &var("X")])
+      rule(right, &[&authority, &var("X"), &write], &[
+        pred(resource, &[&ambient, &var("X")]),
+        pred(owner, &[&ambient, &var("Y"), &var("X")])
       ]),
     ];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &file1]),
-      fact("operation", &[&ambient, &read]),
-      fact("owner", &[&ambient, &geoffroy,&file1]),
+      fact(resource, &[&ambient, &file1]),
+      fact(operation, &[&ambient, &read]),
+      fact(owner, &[&ambient, &geoffroy,&file1]),
     ];
     let ambient_rules = vec![];
 
@@ -447,9 +480,9 @@ mod bench {
       let w = World::biscuit_create(&mut syms, authority_facts.clone(), authority_rules.clone(),
         ambient_facts.clone(), ambient_rules.clone());
 
-      let res = w.query_rule(rule("caveat1", &[var("X")], &[
-        pred("resource", &[&ambient, &var("X")]),
-        pred("owner", &[&ambient, &geoffroy, &var("X")])
+      let res = w.query_rule(rule(caveat1, &[var("X")], &[
+        pred(resource, &[&ambient, &var("X")]),
+        pred(owner, &[&ambient, &geoffroy, &var("X")])
       ]));
 
 
@@ -463,18 +496,26 @@ mod bench {
     let authority = syms.add("authority");
     let ambient = syms.add("ambient");
     let read = syms.add("read");
+    let right = syms.insert("right");
+    let time = syms.insert("time");
+    let source = syms.insert("source");
+    let resource = syms.insert("resource");
+    let operation = syms.insert("operation");
+    let caveat1 = syms.insert("caveat1");
+    let caveat2 = syms.insert("caveat2");
+    let caveat3 = syms.insert("caveat3");
 
     let authority_facts = vec![
-      fact("right", &[&authority, &string("/folder/file1"), &read]),
-      fact("right", &[&authority, &string("/folder/file2"), &read]),
-      fact("right", &[&authority, &string("/folder2/file3"), &read]),
+      fact(right, &[&authority, &string("/folder/file1"), &read]),
+      fact(right, &[&authority, &string("/folder/file2"), &read]),
+      fact(right, &[&authority, &string("/folder2/file3"), &read]),
     ];
     let authority_rules = vec![];
     let ambient_facts = vec![
-      fact("resource", &[&ambient, &string("/folder/file1")]),
-      fact("operation", &[&ambient, &read]),
-      fact("time", &[&ambient, &date(&SystemTime::now())]),
-      fact("source", &[&ambient, &string("192.168.1.3")]),
+      fact(resource, &[&ambient, &string("/folder/file1")]),
+      fact(operation, &[&ambient, &read]),
+      fact(time, &[&ambient, &date(&SystemTime::now())]),
+      fact(source, &[&ambient, &string("192.168.1.3")]),
     ];
     let ambient_rules = vec![];
 
@@ -489,9 +530,9 @@ mod bench {
       let expiration = 1582041370;
 
       // time caveat
-      let res = w.query_rule(constrained_rule("caveat1", &[ID::Variable(0)],
+      let res = w.query_rule(constrained_rule(caveat1, &[ID::Variable(0)],
         &[
-          pred("time", &[&ambient, &ID::Variable(0)]),
+          pred(time, &[&ambient, &ID::Variable(0)]),
         ],
         &[Constraint {
           id: 0,
@@ -502,9 +543,9 @@ mod bench {
       assert!(!res.is_empty());
 
       // set inclusion caveat
-      let res = w.query_rule(constrained_rule("caveat2", &[ID::Variable(0)],
+      let res = w.query_rule(constrained_rule(caveat2, &[ID::Variable(0)],
         &[
-          pred("source", &[&ambient, &ID::Variable(0)]),
+          pred(source, &[&ambient, &ID::Variable(0)]),
         ],
         &[Constraint {
           id: 0,
@@ -515,8 +556,8 @@ mod bench {
       assert!(!res.is_empty());
 
       // string prefix caveat
-      let res = w.query_rule(constrained_rule("caveat3", &[ID::Variable(1234)], &[
-          pred("resource", &[&ambient, &ID::Variable(1234)]),
+      let res = w.query_rule(constrained_rule(caveat3, &[ID::Variable(1234)], &[
+          pred(resource, &[&ambient, &ID::Variable(1234)]),
         ],
         &[Constraint {
           id: 1234,

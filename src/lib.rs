@@ -11,9 +11,11 @@ use sha2::{Sha256, Digest};
 
 mod biscuit;
 
+pub type Symbol = u64;
+
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub enum ID {
-  Symbol(u64),
+  Symbol(Symbol),
   Variable(u32),
   Integer(i64),
   Str(String),
@@ -40,13 +42,13 @@ impl AsRef<ID> for ID {
 
 #[derive(Debug,Clone,PartialEq,Hash,Eq)]
 pub struct Predicate {
-  pub name: String,
+  pub name: Symbol,
   pub ids: Vec<ID>,
 }
 
 impl Predicate {
-  pub fn new<N: Into<String>>(name: N, ids: &[ID]) -> Predicate {
-    Predicate { name: name.into(), ids: ids.to_vec() }
+  pub fn new(name: Symbol, ids: &[ID]) -> Predicate {
+    Predicate { name, ids: ids.to_vec() }
   }
 }
 
@@ -60,7 +62,7 @@ impl AsRef<Predicate> for Predicate {
 pub struct Fact(pub Predicate);
 
 impl Fact {
-  pub fn new<N: Into<String>>(name: N, ids: &[ID]) -> Fact {
+  pub fn new(name: Symbol, ids: &[ID]) -> Fact {
     Fact(Predicate::new(name, ids))
   }
 }
@@ -179,6 +181,7 @@ impl Rule {
       let mut p = self.0.clone();
       for index in 0..p.ids.len() {
         let value = match &p.ids[index] {
+          //FIXME
           ID::Variable(i) => h.get(i).unwrap(),
           _ => continue,
         };
@@ -322,21 +325,21 @@ impl MatchedVariables {
   }
 }
 
-pub fn fact<I:AsRef<ID>>(name: &str, ids: &[I]) -> Fact {
+pub fn fact<I:AsRef<ID>>(name: Symbol, ids: &[I]) -> Fact {
   Fact(Predicate {
-    name: name.to_string(),
+    name,
     ids: ids.iter().map(|id| id.as_ref().clone()).collect(),
   })
 }
 
-pub fn pred<I: AsRef<ID>>(name: &str, ids: &[I]) -> Predicate {
+pub fn pred<I: AsRef<ID>>(name: Symbol, ids: &[I]) -> Predicate {
   Predicate {
-    name: name.to_string(),
+    name,
     ids: ids.iter().map(|id| id.as_ref().clone()).collect(),
   }
 }
 
-pub fn rule<I: AsRef<ID>, P: AsRef<Predicate>>(head_name: &str, head_ids: &[I], predicates: &[P]) -> Rule {
+pub fn rule<I: AsRef<ID>, P: AsRef<Predicate>>(head_name: Symbol, head_ids: &[I], predicates: &[P]) -> Rule {
   Rule(
     pred(head_name, head_ids),
     predicates.iter().map(|p| p.as_ref().clone()).collect(),
@@ -345,7 +348,7 @@ pub fn rule<I: AsRef<ID>, P: AsRef<Predicate>>(head_name: &str, head_ids: &[I], 
 }
 
 pub fn constrained_rule<I: AsRef<ID>, P: AsRef<Predicate>, C: AsRef<Constraint>>(
-  head_name: &str, head_ids: &[I], predicates: &[P], constraints: &[C]) -> Rule {
+  head_name: Symbol, head_ids: &[I], predicates: &[P], constraints: &[C]) -> Rule {
   Rule(
     pred(head_name, head_ids),
     predicates.iter().map(|p| p.as_ref().clone()).collect(),
@@ -470,7 +473,7 @@ impl SymbolTable {
     SymbolTable { symbols: Vec::new() }
   }
 
-  pub fn insert(&mut self, s: &str) -> u64 {
+  pub fn insert(&mut self, s: &str) -> Symbol {
     match self.symbols.iter().position(|sym| sym.as_str() == s) {
       Some(index) => index as u64,
       None => {
@@ -522,49 +525,51 @@ mod tests {
     let c = syms.add("C");
     let d = syms.add("D");
     let e = syms.add("e");
+    let parent = syms.insert("parent");
+    let grandparent = syms.insert("grandparent");
 
-    w.add_fact(fact("parent", &[&a, &b]));
-    w.add_fact(fact("parent", &[&b, &c]));
-    w.add_fact(fact("parent", &[&c, &d]));
+    w.add_fact(fact(parent, &[&a, &b]));
+    w.add_fact(fact(parent, &[&b, &c]));
+    w.add_fact(fact(parent, &[&c, &d]));
 
-    let query_rule_result = w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
-      pred("parent", &[var("grandparent"), var("parent")]),
-      pred("parent", &[var("parent"), var("grandchild")])
+    let query_rule_result = w.query_rule(rule(grandparent, &[var("grandparent"), var("grandchild")], &[
+      pred(parent, &[var("grandparent"), var("parent")]),
+      pred(parent, &[var("parent"), var("grandchild")])
     ]));
     println!("grandparents query_rules: {:?}", query_rule_result);
     println!("current facts: {:?}", w.facts);
 
-    w.add_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
-      pred("parent", &[var("grandparent"), var("parent")]),
-      pred("parent", &[var("parent"), var("grandchild")])
+    w.add_rule(rule(grandparent, &[var("grandparent"), var("grandchild")], &[
+      pred(parent, &[var("grandparent"), var("parent")]),
+      pred(parent, &[var("parent"), var("grandchild")])
     ]));
 
     w.run();
 
     println!("parents:");
-    let res = w.query(pred("parent", &[var("parent"), var("child")]));
+    let res = w.query(pred(parent, &[var("parent"), var("child")]));
     for fact in res {
       println!("\t{}", syms.print_fact(fact));
     }
 
-    println!("parents of B: {:?}", w.query(pred("parent", &[&var("parent"), &b])));
-    println!("grandparents: {:?}", w.query(pred("grandparent", &[var("grandparent"), var("grandchild")])));
-    w.add_fact(fact("parent", &[&c, &e]));
+    println!("parents of B: {:?}", w.query(pred(parent, &[&var("parent"), &b])));
+    println!("grandparents: {:?}", w.query(pred(grandparent, &[var("grandparent"), var("grandchild")])));
+    w.add_fact(fact(parent, &[&c, &e]));
     w.run();
-    let mut res = w.query(pred("grandparent", &[var("grandparent"), var("grandchild")]));
+    let mut res = w.query(pred(grandparent, &[var("grandparent"), var("grandchild")]));
     println!("grandparents after inserting parent(C, E): {:?}", res);
 
     let res = res.drain(..).cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("grandparent", &[&a, &c]),
-      fact("grandparent", &[&b, &d]),
-      fact("grandparent", &[&b, &e])
+      fact(grandparent, &[&a, &c]),
+      fact(grandparent, &[&b, &d]),
+      fact(grandparent, &[&b, &e])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res, compared);
 
     /*w.add_rule(rule("siblings", &[var("A"), var("B")], &[
-      pred("parent", &[var("parent"), var("A")]),
-      pred("parent", &[var("parent"), var("B")])
+      pred(parent, &[var(parent), var("A")]),
+      pred(parent, &[var(parent), var("B")])
     ]));
 
     w.run();
@@ -585,20 +590,23 @@ mod tests {
     let aaa = syms.add("AAA");
     let bbb = syms.add("BBB");
     let ccc = syms.add("CCC");
+    let t1  = syms.insert("t1");
+    let t2  = syms.insert("t2");
+    let join = syms.insert("join");
 
-    w.add_fact(fact("t1", &[&int(0), &abc]));
-    w.add_fact(fact("t1", &[&int(1), &def]));
-    w.add_fact(fact("t1", &[&int(2), &ghi]));
-    w.add_fact(fact("t1", &[&int(3), &jkl]));
-    w.add_fact(fact("t1", &[&int(4), &mno]));
+    w.add_fact(fact(t1, &[&int(0), &abc]));
+    w.add_fact(fact(t1, &[&int(1), &def]));
+    w.add_fact(fact(t1, &[&int(2), &ghi]));
+    w.add_fact(fact(t1, &[&int(3), &jkl]));
+    w.add_fact(fact(t1, &[&int(4), &mno]));
 
-    w.add_fact(fact("t2", &[&int(0), &aaa, &int(0)]));
-    w.add_fact(fact("t2", &[&int(1), &bbb, &int(0)]));
-    w.add_fact(fact("t2", &[&int(2), &ccc, &int(1)]));
+    w.add_fact(fact(t2, &[&int(0), &aaa, &int(0)]));
+    w.add_fact(fact(t2, &[&int(1), &bbb, &int(0)]));
+    w.add_fact(fact(t2, &[&int(2), &ccc, &int(1)]));
 
-    let res = w.query_rule(rule("join", &[var("left"), var("right")], &[
-      pred("t1", &[var("id"), var("left")]),
-      pred("t2", &[var("t2_id"), var("right"), var("id")])
+    let res = w.query_rule(rule(join, &[var("left"), var("right")], &[
+      pred(t1, &[var("id"), var("left")]),
+      pred(t2, &[var("t2_id"), var("right"), var("id")])
     ]));
     for fact in &res {
       println!("\t{}", syms.print_fact(fact));
@@ -606,18 +614,18 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("join", &[&abc, &aaa]),
-      fact("join", &[&abc, &bbb]),
-      fact("join", &[&def, &ccc])
+      fact(join, &[&abc, &aaa]),
+      fact(join, &[&abc, &bbb]),
+      fact(join, &[&def, &ccc])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
     // test constraints
-    let res = w.query_rule(constrained_rule("join",
+    let res = w.query_rule(constrained_rule(join,
       &[var("left"), var("right")],
       &[
-        pred("t1", &[ID::Variable(1234), var("left")]),
-        pred("t2", &[var("t2_id"), var("right"), ID::Variable(1234)])
+        pred(t1, &[ID::Variable(1234), var("left")]),
+        pred(t2, &[var("t2_id"), var("right"), ID::Variable(1234)])
       ],
       &[Constraint {
         id: 1234,
@@ -630,8 +638,8 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("join", &[&abc, &aaa]),
-      fact("join", &[&abc, &bbb])
+      fact(join, &[&abc, &aaa]),
+      fact(join, &[&abc, &bbb])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -644,18 +652,20 @@ mod tests {
     let app_0 = syms.add("app_0");
     let app_1 = syms.add("app_1");
     let app_2 = syms.add("app_2");
+    let route = syms.insert("route");
+    let suff  = syms.insert("route suffix");
 
-    w.add_fact(fact("route", &[&int(0), &app_0, &string("example.com")]));
-    w.add_fact(fact("route", &[&int(1), &app_1, &string("test.com")]));
-    w.add_fact(fact("route", &[&int(2), &app_2, &string("test.fr")]));
-    w.add_fact(fact("route", &[&int(3), &app_0, &string("www.example.com")]));
-    w.add_fact(fact("route", &[&int(4), &app_1, &string("mx.example.com")]));
+    w.add_fact(fact(route, &[&int(0), &app_0, &string("example.com")]));
+    w.add_fact(fact(route, &[&int(1), &app_1, &string("test.com")]));
+    w.add_fact(fact(route, &[&int(2), &app_2, &string("test.fr")]));
+    w.add_fact(fact(route, &[&int(3), &app_0, &string("www.example.com")]));
+    w.add_fact(fact(route, &[&int(4), &app_1, &string("mx.example.com")]));
 
 
-    fn test_suffix(w: &World, suffix: &str) -> Vec<Fact> {
-      w.query_rule(constrained_rule("route suffix",
+    fn test_suffix(w: &World, suff: Symbol, route: Symbol, suffix: &str) -> Vec<Fact> {
+      w.query_rule(constrained_rule(suff,
         &[var("app_id"), ID::Variable(1234)],
-        &[pred("route", &[ID::Variable(0), var("app_id"), ID::Variable(1234)])],
+        &[pred(route, &[ID::Variable(0), var("app_id"), ID::Variable(1234)])],
         &[Constraint {
           id: 1234,
           kind: ConstraintKind::Str(StrConstraint::Suffix(suffix.to_string()))
@@ -663,27 +673,27 @@ mod tests {
       ))
     }
 
-    let res = test_suffix(&w, ".fr");
+    let res = test_suffix(&w, suff, route, ".fr");
     for fact in &res {
       println!("\t{}", syms.print_fact(fact));
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("route suffix", &[&app_2, &string("test.fr")])
+      fact(suff, &[&app_2, &string("test.fr")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
-    let res = test_suffix(&w, "example.com");
+    let res = test_suffix(&w, suff, route, "example.com");
     for fact in &res {
       println!("\t{}", syms.print_fact(fact));
     }
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("route suffix", &[&app_0, &string("example.com")]),
-      fact("route suffix", &[&app_0, &string("www.example.com")]),
-      fact("route suffix", &[&app_1, &string("mx.example.com")])
+      fact(suff, &[&app_0, &string("example.com")]),
+      fact(suff, &[&app_0, &string("www.example.com")]),
+      fact(suff, &[&app_1, &string("mx.example.com")])
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -704,14 +714,17 @@ mod tests {
 
     let abc = syms.add("abc");
     let def = syms.add("def");
+    let x   = syms.insert("x");
+    let before = syms.insert("before");
+    let after = syms.insert("after");
 
-    w.add_fact(fact("x", &[&date(&t1), &abc]));
-    w.add_fact(fact("x", &[&date(&t3), &def]));
+    w.add_fact(fact(x, &[&date(&t1), &abc]));
+    w.add_fact(fact(x, &[&date(&t3), &def]));
 
-    let res = w.query_rule(constrained_rule("before",
+    let res = w.query_rule(constrained_rule(before,
       &[ID::Variable(1234), var("val")],
       &[
-        pred("x", &[ID::Variable(1234), var("val")]),
+        pred(x, &[ID::Variable(1234), var("val")]),
       ],
       &[
         Constraint {
@@ -730,14 +743,14 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("before", &[&date(&t1), &abc]),
+      fact(before, &[&date(&t1), &abc]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
-    let res = w.query_rule(constrained_rule("after",
+    let res = w.query_rule(constrained_rule(after,
       &[ID::Variable(1234), var("val")],
       &[
-        pred("x", &[ID::Variable(1234), var("val")]),
+        pred(x, &[ID::Variable(1234), var("val")]),
       ],
       &[
         Constraint {
@@ -756,7 +769,7 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("after", &[&date(&t3), &def]),
+      fact(after, &[&date(&t3), &def]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -768,14 +781,18 @@ mod tests {
 
     let abc = syms.add("abc");
     let def = syms.add("def");
+    let x   = syms.insert("x");
+    let int_set = syms.insert("int_set");
+    let symbol_set = syms.insert("symbol_set");
+    let string_set = syms.insert("string_set");
 
-    w.add_fact(fact("x", &[&abc, &int(0), &string("test")]));
-    w.add_fact(fact("x", &[&def, &int(2), &string("hello")]));
+    w.add_fact(fact(x, &[&abc, &int(0), &string("test")]));
+    w.add_fact(fact(x, &[&def, &int(2), &string("hello")]));
 
-    let res = w.query_rule(constrained_rule("int_set",
+    let res = w.query_rule(constrained_rule(int_set,
       &[var("sym"), var("str")],
       &[
-        pred("x", &[var("sym"), ID::Variable(0), var("str")]),
+        pred(x, &[var("sym"), ID::Variable(0), var("str")]),
       ],
       &[
         Constraint {
@@ -790,17 +807,17 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("int_set", &[&abc, &string("test")]),
+      fact(int_set, &[&abc, &string("test")]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
     let abc_sym_id = syms.insert("abc");
     let ghi_sym_id = syms.insert("ghi");
 
-    let res = w.query_rule(constrained_rule("symbol_set",
+    let res = w.query_rule(constrained_rule(symbol_set,
       &[ID::Variable(0), var("int"), var("str")],
       &[
-        pred("x", &[ID::Variable(0), var("int"), var("str")]),
+        pred(x, &[ID::Variable(0), var("int"), var("str")]),
       ],
       &[
         Constraint {
@@ -815,14 +832,14 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("symbol_set", &[&def, &int(2), &string("hello")]),
+      fact(symbol_set, &[&def, &int(2), &string("hello")]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
 
-    let res = w.query_rule(constrained_rule("string_set",
+    let res = w.query_rule(constrained_rule(string_set,
       &[var("sym"), var("int"), ID::Variable(0)],
       &[
-        pred("x", &[var("sym"), var("int"), ID::Variable(0)]),
+        pred(x, &[var("sym"), var("int"), ID::Variable(0)]),
       ],
       &[
         Constraint {
@@ -837,7 +854,7 @@ mod tests {
 
     let res2 = res.iter().cloned().collect::<HashSet<_>>();
     let compared = (vec![
-      fact("string_set", &[&abc, &int(0), &string("test")]),
+      fact(string_set, &[&abc, &int(0), &string("test")]),
     ]).drain(..).collect::<HashSet<_>>();
     assert_eq!(res2, compared);
   }
@@ -871,35 +888,37 @@ mod bench {
     let ae = syms.add("AE");
     let ax = syms.add("AX");
     let ay = syms.add("AY");
+    let parent = syms.insert("parent");
+    let grandparent = syms.insert("grandparent");
 
-    w.add_fact(fact("parent", &[&a, &b]));
-    w.add_fact(fact("parent", &[&b, &c]));
-    w.add_fact(fact("parent", &[&c, &d]));
-    w.add_fact(fact("parent", &[&c, &e]));
-    w.add_fact(fact("parent", &[&x, &c]));
-    w.add_fact(fact("parent", &[&y, &b]));
-    w.add_fact(fact("parent", &[&a, &s0]));
-    w.add_fact(fact("parent", &[&a, &s1]));
-    w.add_fact(fact("parent", &[&a, &s2]));
-    w.add_fact(fact("parent", &[&a, &s3]));
-    w.add_fact(fact("parent", &[&a, &s4]));
+    w.add_fact(fact(parent, &[&a, &b]));
+    w.add_fact(fact(parent, &[&b, &c]));
+    w.add_fact(fact(parent, &[&c, &d]));
+    w.add_fact(fact(parent, &[&c, &e]));
+    w.add_fact(fact(parent, &[&x, &c]));
+    w.add_fact(fact(parent, &[&y, &b]));
+    w.add_fact(fact(parent, &[&a, &s0]));
+    w.add_fact(fact(parent, &[&a, &s1]));
+    w.add_fact(fact(parent, &[&a, &s2]));
+    w.add_fact(fact(parent, &[&a, &s3]));
+    w.add_fact(fact(parent, &[&a, &s4]));
 
-    w.add_fact(fact("parent", &[&aa, &ab]));
-    w.add_fact(fact("parent", &[&ab, &ac]));
-    w.add_fact(fact("parent", &[&ac, &ad]));
-    w.add_fact(fact("parent", &[&ac, &ae]));
-    w.add_fact(fact("parent", &[&ax, &ac]));
-    w.add_fact(fact("parent", &[&ay, &ab]));
-    w.add_fact(fact("parent", &[&aa, &s0]));
-    w.add_fact(fact("parent", &[&aa, &s1]));
-    w.add_fact(fact("parent", &[&aa, &s2]));
-    w.add_fact(fact("parent", &[&aa, &s3]));
-    w.add_fact(fact("parent", &[&aa, &s4]));
+    w.add_fact(fact(parent, &[&aa, &ab]));
+    w.add_fact(fact(parent, &[&ab, &ac]));
+    w.add_fact(fact(parent, &[&ac, &ad]));
+    w.add_fact(fact(parent, &[&ac, &ae]));
+    w.add_fact(fact(parent, &[&ax, &ac]));
+    w.add_fact(fact(parent, &[&ay, &ab]));
+    w.add_fact(fact(parent, &[&aa, &s0]));
+    w.add_fact(fact(parent, &[&aa, &s1]));
+    w.add_fact(fact(parent, &[&aa, &s2]));
+    w.add_fact(fact(parent, &[&aa, &s3]));
+    w.add_fact(fact(parent, &[&aa, &s4]));
 
     bench.iter(|| {
-      w.query_rule(rule("grandparent", &[var("grandparent"), var("grandchild")], &[
-        pred("parent", &[var("grandparent"), var("parent")]),
-        pred("parent", &[var("parent"), var("grandchild")])
+      w.query_rule(rule(grandparent, &[var("grandparent"), var("grandchild")], &[
+        pred(parent, &[var("grandparent"), var("parent")]),
+        pred(parent, &[var("parent"), var("grandchild")])
       ]))
     });
   }
@@ -915,19 +934,21 @@ mod bench {
     let e = syms.add("E");
     let x = syms.add("X");
     let y = syms.add("Y");
+    let parent = syms.insert("parent");
+    let ancestor = syms.insert("ancestor");
 
-    w.add_fact(fact("parent", &[&a, &b]));
-    w.add_fact(fact("parent", &[&b, &c]));
-    w.add_fact(fact("parent", &[&c, &d]));
-    w.add_fact(fact("parent", &[&c, &e]));
-    w.add_fact(fact("parent", &[&x, &c]));
-    w.add_fact(fact("parent", &[&y, &b]));
-    w.add_rule(rule("ancestor", &[var("older"), var("younger")], &[
-      pred("parent", &[var("older"), var("younger")])
+    w.add_fact(fact(parent, &[&a, &b]));
+    w.add_fact(fact(parent, &[&b, &c]));
+    w.add_fact(fact(parent, &[&c, &d]));
+    w.add_fact(fact(parent, &[&c, &e]));
+    w.add_fact(fact(parent, &[&x, &c]));
+    w.add_fact(fact(parent, &[&y, &b]));
+    w.add_rule(rule(ancestor, &[var("older"), var("younger")], &[
+      pred(parent, &[var("older"), var("younger")])
     ]));
-    w.add_rule(rule("ancestor", &[var("older"), var("younger")], &[
-      pred("parent", &[var("older"), var("middle")]),
-      pred("ancestor", &[var("middle"), var("younger")])
+    w.add_rule(rule(ancestor, &[var("older"), var("younger")], &[
+      pred(parent, &[var("older"), var("middle")]),
+      pred(ancestor, &[var("middle"), var("younger")])
     ]));
 
     bench.iter(|| {
